@@ -4,6 +4,7 @@ with base as (
   select
     date_trunc('month', coalesce(occur_date, report_date))::date as month_start,
     zcta,
+    neighborhood,
     offense_category,
     offense_type,
     offense_count
@@ -15,6 +16,7 @@ with base as (
 select
   b.month_start,
   b.zcta,
+  b.neighborhood,
   b.offense_category,
   b.offense_type,
   a.acs_year,
@@ -32,6 +34,7 @@ left join {{ ref("int_weather_monthly_portland") }} w on b.month_start = w.month
 group by
   b.month_start,
   b.zcta,
+  b.neighborhood,
   b.offense_category,
   b.offense_type,
   a.acs_year,

@@ -50,6 +50,10 @@ function parseZctaFilters(query) {
     where.push(`month_start <= ($${idx++}::date + interval '1 month - 1 day')`);
     params.push(query.end + "-01");
   }
+  if (query.neighborhood) {
+    where.push(`neighborhood = $${idx++}`);
+    params.push(query.neighborhood);
+  }
   if (query.category) {
     where.push(`offense_category = $${idx++}`);
     params.push(query.category);
