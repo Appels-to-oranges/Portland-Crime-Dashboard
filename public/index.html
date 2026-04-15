@@ -4,154 +4,667 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Portland Crime Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
       :root {
         color-scheme: light dark;
         --bg: #0f1419;
         --surface: #1a2332;
+        --surface2: #222e3f;
         --text: #e7ecf3;
         --muted: #8b9cb3;
         --accent: #5b9fd4;
+        --accent2: #34d399;
+        --accent3: #f59e0b;
+        --accent4: #a78bfa;
+        --accent5: #f472b6;
         --error: #e07a7a;
+        --border: #2a3a4e;
         font-family: "Segoe UI", system-ui, sans-serif;
       }
       @media (prefers-color-scheme: light) {
         :root {
           --bg: #f4f6f9;
           --surface: #fff;
+          --surface2: #f0f2f5;
           --text: #1a2332;
           --muted: #5c6b7f;
           --accent: #2563eb;
+          --accent2: #059669;
+          --accent3: #d97706;
+          --accent4: #7c3aed;
+          --accent5: #db2777;
           --error: #b91c1c;
+          --border: #e2e6ed;
         }
       }
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; margin: 0; }
       body {
-        margin: 0;
         min-height: 100vh;
         background: var(--bg);
         color: var(--text);
         line-height: 1.5;
       }
-      main {
-        max-width: 40rem;
+
+      /* Header */
+      header {
+        padding: 1.5rem 2rem 1rem;
+        max-width: 90rem;
         margin: 0 auto;
-        padding: 2.5rem 1.5rem;
       }
-      h1 {
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin: 0 0 0.25rem;
+      header h1 {
+        font-size: 1.6rem;
+        font-weight: 700;
         letter-spacing: -0.02em;
       }
-      .sub {
+      header .sub {
         color: var(--muted);
-        font-size: 0.95rem;
-        margin-bottom: 2rem;
+        font-size: 0.9rem;
+        margin-top: 0.15rem;
       }
-      .card {
-        background: var(--surface);
-        border-radius: 12px;
-        padding: 1.25rem 1.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+
+      /* Filters */
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        padding: 0.75rem 2rem;
+        max-width: 90rem;
+        margin: 0 auto;
+        align-items: flex-end;
       }
-      .card h2 {
-        font-size: 0.75rem;
+      .filter-group { display: flex; flex-direction: column; gap: 0.2rem; }
+      .filter-group label {
+        font-size: 0.7rem;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.05em;
         color: var(--muted);
-        margin: 0 0 1rem;
         font-weight: 600;
       }
-      dl {
-        margin: 0;
-        display: grid;
-        gap: 0.75rem;
-      }
-      dt {
-        color: var(--muted);
+      .filter-group select,
+      .filter-group input {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 0.6rem;
         font-size: 0.85rem;
+        font-family: inherit;
+        min-width: 9rem;
       }
-      dd {
-        margin: 0;
-        font-size: 1.25rem;
+      .filter-group select:focus,
+      .filter-group input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+      .btn-reset {
+        background: var(--surface2);
+        color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.4rem 1rem;
+        font-size: 0.85rem;
+        cursor: pointer;
+        font-family: inherit;
+        align-self: flex-end;
+      }
+      .btn-reset:hover { color: var(--text); }
+
+      /* Grid */
+      .dashboard {
+        max-width: 90rem;
+        margin: 0 auto;
+        padding: 1rem 2rem 3rem;
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+      }
+
+      /* KPI cards */
+      .kpi {
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 1.1rem 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .kpi .label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .kpi .value {
+        font-size: 1.7rem;
+        font-weight: 700;
         font-variant-numeric: tabular-nums;
+        margin-top: 0.2rem;
         color: var(--accent);
       }
-      .status {
-        margin-top: 1.5rem;
-        font-size: 0.9rem;
+      .kpi .detail {
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 0.1rem;
+      }
+
+      /* Chart cards */
+      .chart-card {
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        min-height: 22rem;
+        display: flex;
+        flex-direction: column;
+      }
+      .chart-card.wide { grid-column: span 2; }
+      .chart-card.full { grid-column: span 4; }
+      .chart-card h2 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+      }
+      .chart-wrap {
+        flex: 1;
+        position: relative;
+        min-height: 0;
+      }
+
+      /* Status bar */
+      .status-bar {
+        text-align: center;
+        padding: 0.5rem;
+        font-size: 0.8rem;
         color: var(--muted);
       }
-      .status.error {
-        color: var(--error);
+      .status-bar.error { color: var(--error); }
+
+      /* Responsive */
+      @media (max-width: 1100px) {
+        .dashboard { grid-template-columns: 1fr 1fr; }
+        .chart-card.wide { grid-column: span 2; }
+        .chart-card.full { grid-column: span 2; }
+        .kpi:nth-child(n+3) { grid-column: span 1; }
       }
-      .links {
-        margin-top: 2rem;
-        font-size: 0.9rem;
-      }
-      .links a {
-        color: var(--accent);
-        text-decoration: none;
-      }
-      .links a:hover {
-        text-decoration: underline;
+      @media (max-width: 640px) {
+        .dashboard { grid-template-columns: 1fr; padding: 1rem; }
+        .chart-card.wide, .chart-card.full { grid-column: span 1; }
+        .filters { padding: 0.75rem 1rem; }
+        header { padding: 1.25rem 1rem 0.75rem; }
       }
     </style>
   </head>
   <body>
-    <main>
+    <header>
       <h1>Portland Crime Dashboard</h1>
-      <p class="sub">Local summary from <code>marts.mart_offense_monthly_neighborhood</code></p>
+      <p class="sub">Portland Police Bureau offense data with weather and demographic context</p>
+    </header>
 
-      <section class="card" aria-live="polite">
-        <h2>Warehouse snapshot</h2>
-        <dl id="stats">
-          <div>
-            <dt>Mart rows</dt>
-            <dd id="mart-rows">—</dd>
-          </div>
-          <div>
-            <dt>Latest report month (source field)</dt>
-            <dd id="latest-month">—</dd>
-          </div>
-        </dl>
-        <p class="status" id="status">Loading…</p>
-      </section>
+    <div class="filters" id="filter-bar">
+      <div class="filter-group">
+        <label for="f-start">From</label>
+        <input type="month" id="f-start" />
+      </div>
+      <div class="filter-group">
+        <label for="f-end">To</label>
+        <input type="month" id="f-end" />
+      </div>
+      <div class="filter-group">
+        <label for="f-neighborhood">Neighborhood</label>
+        <select id="f-neighborhood"><option value="">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label for="f-category">Offense Category</label>
+        <select id="f-category"><option value="">All</option></select>
+      </div>
+      <button class="btn-reset" id="btn-reset">Reset</button>
+    </div>
 
-      <p class="links">
-        <a href="/api/summary">JSON: /api/summary</a>
-        ·
-        <a href="/health">/health</a>
-      </p>
-    </main>
+    <p class="status-bar" id="status">Loading dashboard...</p>
+
+    <div class="dashboard" id="dashboard">
+      <!-- KPI cards -->
+      <div class="kpi" id="kpi-total">
+        <div class="label">Total Offenses</div>
+        <div class="value" id="kpi-total-val">&mdash;</div>
+        <div class="detail" id="kpi-total-detail"></div>
+      </div>
+      <div class="kpi" id="kpi-neighborhoods">
+        <div class="label">Neighborhoods</div>
+        <div class="value" id="kpi-neighborhoods-val">&mdash;</div>
+        <div class="detail">reporting offenses</div>
+      </div>
+      <div class="kpi" id="kpi-latest">
+        <div class="label">Latest Month</div>
+        <div class="value" id="kpi-latest-val">&mdash;</div>
+        <div class="detail">most recent data</div>
+      </div>
+      <div class="kpi" id="kpi-temp">
+        <div class="label">Avg Monthly High</div>
+        <div class="value" id="kpi-temp-val">&mdash;</div>
+        <div class="detail">temperature across period</div>
+      </div>
+
+      <!-- Row 2: trend + category -->
+      <div class="chart-card wide">
+        <h2>Monthly Crime Trend</h2>
+        <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+      </div>
+      <div class="chart-card wide">
+        <h2>Offenses by Category</h2>
+        <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+      </div>
+
+      <!-- Row 3: neighborhoods + weather -->
+      <div class="chart-card wide">
+        <h2>Top 15 Neighborhoods</h2>
+        <div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div>
+      </div>
+      <div class="chart-card wide">
+        <h2>Weather vs. Crime</h2>
+        <div class="chart-wrap"><canvas id="chart-weather"></canvas></div>
+      </div>
+
+      <!-- Row 4: demographics -->
+      <div class="chart-card full">
+        <h2>Demographics &amp; Crime by ZCTA</h2>
+        <div class="chart-wrap"><canvas id="chart-demographics"></canvas></div>
+      </div>
+    </div>
+
     <script>
-      (async () => {
-        const statusEl = document.getElementById("status");
-        const rowsEl = document.getElementById("mart-rows");
-        const monthEl = document.getElementById("latest-month");
+    (function () {
+      const $ = (id) => document.getElementById(id);
+      const isDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+      function themeColors() {
+        const s = getComputedStyle(document.documentElement);
+        return {
+          text: s.getPropertyValue("--text").trim(),
+          muted: s.getPropertyValue("--muted").trim(),
+          accent: s.getPropertyValue("--accent").trim(),
+          accent2: s.getPropertyValue("--accent2").trim(),
+          accent3: s.getPropertyValue("--accent3").trim(),
+          accent4: s.getPropertyValue("--accent4").trim(),
+          accent5: s.getPropertyValue("--accent5").trim(),
+          surface: s.getPropertyValue("--surface").trim(),
+          grid: isDark() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
+        };
+      }
+
+      function chartDefaults() {
+        const c = themeColors();
+        Chart.defaults.color = c.muted;
+        Chart.defaults.borderColor = c.grid;
+        Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+        Chart.defaults.font.size = 12;
+        Chart.defaults.plugins.legend.labels.usePointStyle = true;
+        Chart.defaults.plugins.legend.labels.pointStyleWidth = 8;
+        Chart.defaults.maintainAspectRatio = false;
+        Chart.defaults.responsive = true;
+      }
+      chartDefaults();
+
+      const charts = {};
+      const statusEl = $("status");
+
+      function qs() {
+        const p = new URLSearchParams();
+        const start = $("f-start").value;
+        const end = $("f-end").value;
+        const n = $("f-neighborhood").value;
+        const c = $("f-category").value;
+        if (start) p.set("start", start);
+        if (end) p.set("end", end);
+        if (n) p.set("neighborhood", n);
+        if (c) p.set("category", c);
+        const s = p.toString();
+        return s ? "?" + s : "";
+      }
+
+      async function fetchJson(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(r.statusText);
+        return r.json();
+      }
+
+      // Palette for category bars
+      const PALETTE = [];
+      function ensurePalette() {
+        if (PALETTE.length) return;
+        const c = themeColors();
+        PALETTE.push(c.accent, c.accent2, c.accent3, c.accent4, c.accent5,
+          "#6366f1", "#ec4899", "#14b8a6", "#f97316", "#8b5cf6",
+          "#06b6d4", "#84cc16", "#e11d48", "#0ea5e9", "#eab308");
+      }
+
+      // ---------- FILTERS ----------
+      async function loadFilters() {
+        const data = await fetchJson("/api/filters");
+        const nSel = $("f-neighborhood");
+        const cSel = $("f-category");
+        data.neighborhoods.forEach((n) => {
+          const o = document.createElement("option");
+          o.value = n; o.textContent = n;
+          nSel.appendChild(o);
+        });
+        data.categories.forEach((c) => {
+          const o = document.createElement("option");
+          o.value = c; o.textContent = c;
+          cSel.appendChild(o);
+        });
+        if (data.min_month) $("f-start").min = data.min_month;
+        if (data.max_month) $("f-end").max = data.max_month;
+      }
+
+      // ---------- TREND ----------
+      function renderTrend(data) {
+        const c = themeColors();
+        const labels = data.map((d) => d.month);
+        const values = data.map((d) => d.total);
+
+        if (charts.trend) {
+          charts.trend.data.labels = labels;
+          charts.trend.data.datasets[0].data = values;
+          charts.trend.update();
+          return;
+        }
+        charts.trend = new Chart($("chart-trend"), {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              label: "Offenses",
+              data: values,
+              borderColor: c.accent,
+              backgroundColor: c.accent + "22",
+              fill: true,
+              tension: 0.3,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+            }],
+          },
+          options: {
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true },
+            },
+            plugins: { legend: { display: false } },
+            interaction: { intersect: false, mode: "index" },
+          },
+        });
+      }
+
+      // ---------- CATEGORY ----------
+      function renderCategory(data) {
+        ensurePalette();
+        const labels = data.map((d) => d.category);
+        const values = data.map((d) => d.total);
+        const colors = data.map((_, i) => PALETTE[i % PALETTE.length]);
+
+        if (charts.category) {
+          charts.category.data.labels = labels;
+          charts.category.data.datasets[0].data = values;
+          charts.category.data.datasets[0].backgroundColor = colors;
+          charts.category.update();
+          return;
+        }
+        charts.category = new Chart($("chart-category"), {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }],
+          },
+          options: {
+            indexAxis: "y",
+            scales: { x: { beginAtZero: true }, y: { grid: { display: false } } },
+            plugins: { legend: { display: false } },
+            onClick(_e, elems) {
+              if (!elems.length) return;
+              const cat = labels[elems[0].index];
+              $("f-category").value = cat;
+              refreshAll();
+            },
+          },
+        });
+      }
+
+      // ---------- NEIGHBORHOOD ----------
+      function renderNeighborhood(data) {
+        const c = themeColors();
+        const labels = data.map((d) => d.neighborhood);
+        const values = data.map((d) => d.total);
+
+        if (charts.neighborhood) {
+          charts.neighborhood.data.labels = labels;
+          charts.neighborhood.data.datasets[0].data = values;
+          charts.neighborhood.update();
+          return;
+        }
+        charts.neighborhood = new Chart($("chart-neighborhood"), {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [{
+              label: "Offenses",
+              data: values,
+              backgroundColor: c.accent + "cc",
+              borderRadius: 4,
+            }],
+          },
+          options: {
+            indexAxis: "y",
+            scales: { x: { beginAtZero: true }, y: { grid: { display: false } } },
+            plugins: { legend: { display: false } },
+            onClick(_e, elems) {
+              if (!elems.length) return;
+              const n = labels[elems[0].index];
+              $("f-neighborhood").value = n;
+              refreshAll();
+            },
+          },
+        });
+      }
+
+      // ---------- WEATHER ----------
+      function renderWeather(data) {
+        const c = themeColors();
+        const labels = data.map((d) => d.month);
+        const crime = data.map((d) => d.total);
+        const temp = data.map((d) => parseFloat(d.avg_high_c));
+        const precip = data.map((d) => parseFloat(d.avg_precip_mm));
+
+        if (charts.weather) {
+          charts.weather.data.labels = labels;
+          charts.weather.data.datasets[0].data = crime;
+          charts.weather.data.datasets[1].data = temp;
+          charts.weather.data.datasets[2].data = precip;
+          charts.weather.update();
+          return;
+        }
+        charts.weather = new Chart($("chart-weather"), {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Offenses",
+                data: crime,
+                borderColor: c.accent,
+                backgroundColor: c.accent + "22",
+                yAxisID: "y",
+                tension: 0.3,
+                pointRadius: 2,
+              },
+              {
+                label: "Avg High (°C)",
+                data: temp,
+                borderColor: c.accent3,
+                borderDash: [4, 3],
+                yAxisID: "y1",
+                tension: 0.3,
+                pointRadius: 2,
+              },
+              {
+                label: "Precip (mm)",
+                data: precip,
+                borderColor: c.accent2,
+                borderDash: [2, 2],
+                yAxisID: "y1",
+                tension: 0.3,
+                pointRadius: 2,
+              },
+            ],
+          },
+          options: {
+            scales: {
+              x: { grid: { display: false } },
+              y: { position: "left", beginAtZero: true, title: { display: true, text: "Offenses" } },
+              y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp (°C) / Precip (mm)" } },
+            },
+            interaction: { intersect: false, mode: "index" },
+          },
+        });
+      }
+
+      // ---------- DEMOGRAPHICS ----------
+      function renderDemographics(data) {
+        const c = themeColors();
+        const pts = data
+          .filter((d) => d.population > 0 && d.poverty_rate_pct != null)
+          .map((d) => ({
+            x: parseFloat(d.poverty_rate_pct),
+            y: (d.total_offenses / d.population) * 1000,
+            r: Math.max(3, Math.sqrt(d.population) / 8),
+            zcta: d.zcta,
+            pop: d.population,
+            income: d.median_income,
+            offenses: d.total_offenses,
+          }));
+
+        if (charts.demographics) {
+          charts.demographics.data.datasets[0].data = pts;
+          charts.demographics.update();
+          return;
+        }
+        charts.demographics = new Chart($("chart-demographics"), {
+          type: "bubble",
+          data: {
+            datasets: [{
+              label: "ZCTAs",
+              data: pts,
+              backgroundColor: c.accent4 + "99",
+              borderColor: c.accent4,
+              borderWidth: 1,
+            }],
+          },
+          options: {
+            scales: {
+              x: { title: { display: true, text: "Poverty Rate (%)" }, beginAtZero: true },
+              y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true },
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const d = ctx.raw;
+                    return [
+                      `ZCTA ${d.zcta}`,
+                      `Pop: ${d.pop.toLocaleString()}`,
+                      `Poverty: ${d.x}%`,
+                      `Income: $${(d.income || 0).toLocaleString()}`,
+                      `Offenses/1k: ${d.y.toFixed(1)}`,
+                    ];
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // ---------- KPIs ----------
+      function updateKPIs(trend, neighborhood, weather) {
+        const total = trend.reduce((s, d) => s + d.total, 0);
+        $("kpi-total-val").textContent = total.toLocaleString();
+        const months = trend.length;
+        $("kpi-total-detail").textContent = months
+          ? `across ${months} month${months !== 1 ? "s" : ""}`
+          : "";
+
+        $("kpi-neighborhoods-val").textContent = neighborhood.length.toLocaleString();
+
+        if (trend.length) {
+          $("kpi-latest-val").textContent = trend[trend.length - 1].month_label || trend[trend.length - 1].month;
+        }
+
+        if (weather.length) {
+          const avgTemp = weather.reduce((s, d) => s + parseFloat(d.avg_high_c || 0), 0) / weather.length;
+          $("kpi-temp-val").textContent = avgTemp.toFixed(1) + "°C";
+        }
+      }
+
+      // ---------- REFRESH ----------
+      async function refreshAll() {
+        statusEl.textContent = "Updating...";
+        statusEl.classList.remove("error");
         try {
-          const res = await fetch("/api/summary");
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            statusEl.classList.add("error");
-            statusEl.textContent =
-              data.error === "database_unavailable"
-                ? "Database unavailable (set DATABASE_URL and run the pipeline)."
-                : res.statusText || "Request failed";
-            return;
-          }
-          rowsEl.textContent =
-            data.mart_rows != null ? Number(data.mart_rows).toLocaleString() : "—";
-          monthEl.textContent = data.latest_report_month_year ?? "—";
-          statusEl.textContent = "Connected.";
+          const q = qs();
+          const [trend, cat, neigh, weather, demo] = await Promise.all([
+            fetchJson("/api/trend" + q),
+            fetchJson("/api/by-category" + q),
+            fetchJson("/api/by-neighborhood" + q),
+            fetchJson("/api/weather-crime" + q),
+            fetchJson("/api/demographics" + q),
+          ]);
+          updateKPIs(trend, neigh, weather);
+          renderTrend(trend);
+          renderCategory(cat);
+          renderNeighborhood(neigh);
+          renderWeather(weather);
+          renderDemographics(demo);
+          statusEl.textContent = "";
         } catch (e) {
           statusEl.classList.add("error");
-          statusEl.textContent = "Could not reach the API.";
+          statusEl.textContent = "Failed to load data. Is the database connected?";
+          console.error(e);
         }
-      })();
+      }
+
+      // ---------- INIT ----------
+      async function init() {
+        try {
+          await loadFilters();
+        } catch (e) {
+          console.error("Could not load filters", e);
+        }
+        await refreshAll();
+
+        $("f-start").addEventListener("change", refreshAll);
+        $("f-end").addEventListener("change", refreshAll);
+        $("f-neighborhood").addEventListener("change", refreshAll);
+        $("f-category").addEventListener("change", refreshAll);
+        $("btn-reset").addEventListener("click", () => {
+          $("f-start").value = "";
+          $("f-end").value = "";
+          $("f-neighborhood").value = "";
+          $("f-category").value = "";
+          refreshAll();
+        });
+
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+          chartDefaults();
+          Object.values(charts).forEach((ch) => ch.update());
+        });
+      }
+
+      init();
+    })();
     </script>
   </body>
 </html>
