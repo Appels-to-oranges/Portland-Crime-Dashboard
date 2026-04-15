@@ -40,7 +40,7 @@ export function writeDbtProfiles() {
   const c = getPgConfig();
   const dir = path.join(repoRoot, "dbt", "profiles");
   fs.mkdirSync(dir, { recursive: true });
-  const out = path.join(dir, "generated_profiles.yml");
+  const out = path.join(dir, "profiles.yml");
   const threads = Number(process.env.DBT_THREADS || 4);
   const body = `portland_crime:
   target: prod

@@ -1,8 +1,8 @@
 {{ config(schema="staging", alias="stg_acs_zcta") }}
 
 select
-  nullif(trim(zcta), "") as zcta,
-  nullif(trim(acs_year), "") as acs_year,
+  nullif(trim(zcta), '') as zcta,
+  nullif(trim(acs_year), '') as acs_year,
   population,
   poverty_universe,
   poverty_count,
@@ -13,4 +13,4 @@ select
   end as poverty_rate_pct,
   _loaded_at
 from {{ source("raw_reference", "acs_zcta") }}
-where nullif(trim(zcta), "") is not null
+where nullif(trim(zcta), '') is not null
