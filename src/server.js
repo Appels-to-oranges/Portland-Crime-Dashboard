@@ -182,6 +182,109 @@ app.get("/api/demographics", async (req, res) => {
   }
 });
 
+// Heatmap: month-of-year x offense category (averaged across years)
+app.get("/api/heatmap", async (req, res) => {
+  const { clause, params } = parseZctaFilters(req.query);
+  try {
+    const { rows } = await pool.query(
+      `WITH monthly AS (
+         SELECT extract(month FROM month_start)::int AS month_num,
+                extract(year FROM month_start)::int AS yr,
+                offense_category AS category,
+                sum(offense_count)::int AS total
+         FROM marts.mart_offense_monthly_zcta
+         WHERE month_start IS NOT NULL AND offense_category IS NOT NULL ${clause}
+         GROUP BY 1, 2, 3
+       )
+       SELECT month_num,
+              category,
+              round(avg(total)::numeric, 1)::float AS avg_total
+       FROM monthly
+       GROUP BY 1, 2
+       ORDER BY 1, 2`,
+      params,
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
+// Seasonality: average offenses + weather by month-of-year across all years
+app.get("/api/seasonality", async (req, res) => {
+  const { clause, params } = parseZctaFilters(req.query);
+  try {
+    const { rows } = await pool.query(
+      `WITH monthly AS (
+         SELECT month_start,
+                extract(month FROM month_start)::int AS month_num,
+                sum(offense_count)::int AS total,
+                avg(month_avg_high_temp_c) AS avg_high_c,
+                sum(month_total_precip_mm) / nullif(count(DISTINCT zcta), 0) AS avg_precip_mm
+         FROM marts.mart_offense_monthly_zcta
+         WHERE month_start IS NOT NULL ${clause}
+         GROUP BY month_start
+       )
+       SELECT month_num,
+              to_char(to_date(month_num::text, 'MM'), 'Mon') AS month_name,
+              round(avg(total)::numeric, 0)::int AS avg_offenses,
+              round(avg(avg_high_c)::numeric, 1) AS avg_high_c,
+              round(avg(avg_precip_mm)::numeric, 1) AS avg_precip_mm
+       FROM monthly
+       GROUP BY month_num
+       ORDER BY month_num`,
+      params,
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
+// Correlation: scatter data + Pearson r for temp-crime and precip-crime
+app.get("/api/correlation", async (req, res) => {
+  const { clause, params } = parseZctaFilters(req.query);
+  try {
+    const [scatter, corr] = await Promise.all([
+      pool.query(
+        `SELECT month_start::text AS month,
+                sum(offense_count)::int AS total,
+                round(avg(month_avg_high_temp_c)::numeric, 1) AS avg_high_c,
+                round(sum(month_total_precip_mm)::numeric / nullif(count(DISTINCT zcta), 0), 1) AS avg_precip_mm
+         FROM marts.mart_offense_monthly_zcta
+         WHERE month_start IS NOT NULL AND month_avg_high_temp_c IS NOT NULL ${clause}
+         GROUP BY month_start ORDER BY month_start`,
+        params,
+      ),
+      pool.query(
+        `WITH monthly AS (
+           SELECT month_start,
+                  sum(offense_count)::float AS total,
+                  avg(month_avg_high_temp_c)::float AS avg_high_c,
+                  sum(month_total_precip_mm)::float / nullif(count(DISTINCT zcta), 0) AS avg_precip_mm
+           FROM marts.mart_offense_monthly_zcta
+           WHERE month_start IS NOT NULL AND month_avg_high_temp_c IS NOT NULL ${clause}
+           GROUP BY month_start
+         )
+         SELECT round(corr(total, avg_high_c)::numeric, 3) AS r_temp,
+                round(corr(total, avg_precip_mm)::numeric, 3) AS r_precip
+         FROM monthly`,
+        params,
+      ),
+    ]);
+    res.json({
+      points: scatter.rows,
+      r_temp: corr.rows[0]?.r_temp ?? null,
+      r_precip: corr.rows[0]?.r_precip ?? null,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
 // Legacy summary (kept for backward compat)
 app.get("/api/summary", async (_req, res) => {
   try {
