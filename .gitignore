@@ -1,0 +1,6 @@
+node_modules/
+.env
+.env.*
+dbt/target/
+dbt/logs/
+dbt/profiles/generated_profiles.yml

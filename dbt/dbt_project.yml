@@ -1,0 +1,17 @@
+name: portland_crime
+version: "1.0.0"
+config-version: 2
+
+profile: portland_crime
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+models:
+  portland_crime:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table

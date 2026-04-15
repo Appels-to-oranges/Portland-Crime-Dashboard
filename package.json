@@ -1,0 +1,24 @@
+{
+  "name": "portland-crime-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "ingest": "node scripts/ingest.mjs",
+    "ingest:reference": "node scripts/ingest-reference.mjs",
+    "dbt": "node scripts/run-dbt.mjs",
+    "pipeline": "node scripts/run-pipeline.mjs"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "pg-connection-string": "^2.7.0",
+    "pg-copy-streams": "^6.0.6",
+    "shpjs": "^6.2.0"
+  }
+}

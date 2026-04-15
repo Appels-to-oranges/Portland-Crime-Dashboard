@@ -1,0 +1,7 @@
+node_modules
+dbt/target
+dbt/logs
+dbt/profiles/generated_profiles.yml
+.git
+.env
+*.md

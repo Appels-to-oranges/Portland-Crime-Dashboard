@@ -1,0 +1,22 @@
+version: 2
+
+sources:
+  - name: raw_portland
+    description: Loaded by Node ingest from PPB Tableau Public CSV export.
+    schema: raw
+    tables:
+      - name: offenses
+        description: Raw offense rows (text columns mirror CSV).
+
+  - name: raw_reference
+    description: Loaded by scripts/ingest-reference.mjs (Census + Open-Meteo).
+    schema: raw
+    tables:
+      - name: zcta_geometry
+        description: ZCTA 2020 cartographic boundary polygons (OR/WA subset); point-in-polygon assignment via PostGIS.
+      - name: zcta_reference
+        description: ZCTA internal points for OR/WA (2024 gazetteer); map labels / QA (join uses zcta_geometry).
+      - name: acs_zcta
+        description: ACS 5-year (default 2022) for OR/WA ZCTAs — population, poverty counts, median income.
+      - name: weather_daily
+        description: Daily max temperature (°C) and precipitation (mm) for a fixed Portland metro point (Open-Meteo).
