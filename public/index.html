@@ -128,17 +128,7 @@
       <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
       <div class="chart-card wide"><h2>Weather vs. Crime</h2><div class="chart-wrap"><canvas id="chart-weather"></canvas></div></div>
 
-      <!-- Row 5: precipitation deep-dive -->
-      <div class="chart-card wide">
-        <h2>Avg Monthly Offenses by Precipitation Level</h2>
-        <div class="chart-wrap"><canvas id="chart-precip-bucket"></canvas></div>
-      </div>
-      <div class="chart-card wide">
-        <h2 id="precip-scatter-title">Precipitation vs. Crime</h2>
-        <div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div>
-      </div>
-
-      <!-- Row 5b: per-category precip correlation -->
+      <!-- Row 5: precipitation correlation by category -->
       <div class="chart-card full">
         <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
         <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
@@ -308,34 +298,6 @@
         ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Offenses" } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp / Precip" } } }, interaction: { intersect: false, mode: "index" } } });
       }
 
-      // ---------- PRECIP BUCKETS ----------
-      function renderPrecipBuckets(precipData) {
-        const c = themeColors();
-        const buckets = precipData.buckets;
-        const labels = buckets.map((b) => b.bucket);
-        const values = buckets.map((b) => b.avg_offenses);
-        const counts = buckets.map((b) => b.month_count);
-        const colors = ["#93c5fd", "#60a5fa", "#3b82f6", "#1d4ed8"];
-
-        if (charts.precipBucket) {
-          charts.precipBucket.data.labels = labels;
-          charts.precipBucket.data.datasets[0].data = values;
-          charts.precipBucket.update();
-          return;
-        }
-        charts.precipBucket = new Chart($("chart-precip-bucket"), {
-          type: "bar",
-          data: { labels, datasets: [{ label: "Avg Monthly Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] },
-          options: {
-            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "Avg Monthly Offenses" } } },
-            plugins: {
-              legend: { display: false },
-              tooltip: { callbacks: { afterLabel(ctx) { return `(${counts[ctx.dataIndex]} months in bucket)`; } } },
-            },
-          },
-        });
-      }
-
       // ---------- PRECIP BY CATEGORY ----------
       function renderPrecipCategory(data) {
         const c = themeColors();
@@ -371,26 +333,6 @@
               legend: { display: false },
               tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return `Avg monthly: ${d.avg_offenses} offenses (${d.months} months)`; } } },
             },
-          },
-        });
-      }
-
-      // ---------- PRECIP SCATTER ----------
-      function renderPrecipScatter(precipData) {
-        const c = themeColors();
-        const pts = precipData.points
-          .filter((d) => d.precip_mm != null)
-          .map((d) => ({ x: parseFloat(d.precip_mm), y: d.total, month: d.month }));
-        const rVal = precipData.r_precip;
-        $("precip-scatter-title").textContent = `Precipitation vs. Crime (r = ${rVal != null ? rVal : "N/A"})`;
-
-        if (charts.precipScatter) { charts.precipScatter.data.datasets[0].data = pts; charts.precipScatter.update(); return; }
-        charts.precipScatter = new Chart($("chart-precip-scatter"), {
-          type: "scatter",
-          data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent2 + "aa", borderColor: c.accent2, pointRadius: 5, pointHoverRadius: 8 }] },
-          options: {
-            scales: { x: { title: { display: true, text: "Monthly Precip (mm)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Precip: ${d.x}mm`, `Offenses: ${d.y.toLocaleString()}`]; } } } },
           },
         });
       }
@@ -445,11 +387,11 @@
         statusEl.classList.remove("error");
         try {
           const q = qs();
-          const [trend, cat, neigh, weather, demo, seasonal, corr, geo, precip, precipCat] = await Promise.all([
+          const [trend, cat, neigh, weather, demo, seasonal, corr, geo, precipCat] = await Promise.all([
             fetchJson("/api/trend" + q), fetchJson("/api/by-category" + q), fetchJson("/api/by-neighborhood" + q),
             fetchJson("/api/weather-crime" + q), fetchJson("/api/demographics" + q),
             fetchJson("/api/seasonality" + q), fetchJson("/api/correlation" + q), fetchJson("/api/geo" + q),
-            fetchJson("/api/precip-analysis" + q), fetchJson("/api/precip-by-category" + q),
+            fetchJson("/api/precip-by-category" + q),
           ]);
           updateKPIs(trend, neigh, corr);
           renderMap(geo);
@@ -457,8 +399,6 @@
           renderCategory(cat);
           renderNeighborhood(neigh);
           renderWeather(weather);
-          renderPrecipBuckets(precip);
-          renderPrecipScatter(precip);
           renderPrecipCategory(precipCat);
           renderDemographics(demo);
           renderSeasonality(seasonal);

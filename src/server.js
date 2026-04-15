@@ -39,7 +39,7 @@ function parseFilters(query) {
 }
 
 function parseZctaFilters(query) {
-  const where = [];
+  const where = ["month_start >= '2022-01-01'::date"];
   const params = [];
   let idx = 1;
   if (query.start) {
@@ -54,7 +54,7 @@ function parseZctaFilters(query) {
     where.push(`offense_category = $${idx++}`);
     params.push(query.category);
   }
-  return { clause: where.length ? "AND " + where.join(" AND ") : "", params };
+  return { clause: "AND " + where.join(" AND "), params };
 }
 
 // Distinct filter values + date range
