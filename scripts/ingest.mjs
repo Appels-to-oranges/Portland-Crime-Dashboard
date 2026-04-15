@@ -9,7 +9,7 @@ import { getPgConfig } from "./lib/db-config.mjs";
 
 const BASE_URL =
   "https://public.tableau.com/views/PPBOpenDataDownloads/New_Offense_Data_";
-const DEFAULT_YEARS = "2025,2026";
+const DEFAULT_YEARS = "2022,2023,2024,2025,2026";
 
 function buildUrl(year) {
   if (process.env.OFFENSE_CSV_URL) return process.env.OFFENSE_CSV_URL;

@@ -285,6 +285,114 @@ app.get("/api/correlation", async (req, res) => {
   }
 });
 
+// GeoJSON choropleth: ZCTA polygons with crime stats
+app.get("/api/geo", async (req, res) => {
+  const { clause, params } = parseZctaFilters(req.query);
+  try {
+    const { rows } = await pool.query(
+      `WITH stats AS (
+         SELECT zcta,
+                sum(offense_count)::int AS total_offenses,
+                max(population)::int AS population
+         FROM marts.mart_offense_monthly_zcta
+         WHERE zcta IS NOT NULL ${clause}
+         GROUP BY zcta
+       )
+       SELECT json_build_object(
+         'type', 'FeatureCollection',
+         'features', coalesce(json_agg(json_build_object(
+           'type', 'Feature',
+           'properties', json_build_object(
+             'zcta', g.zcta,
+             'total', coalesce(s.total_offenses, 0),
+             'population', coalesce(s.population, 0),
+             'rate', CASE WHEN coalesce(s.population, 0) > 0
+                         THEN round(s.total_offenses * 1000.0 / s.population, 1)
+                         ELSE 0 END
+           ),
+           'geometry', ST_AsGeoJSON(g.geom)::json
+         )), '[]'::json)
+       ) AS geojson
+       FROM raw.zcta_geometry g
+       INNER JOIN stats s ON g.zcta = s.zcta`,
+      params,
+    );
+    res.json(rows[0]?.geojson ?? { type: "FeatureCollection", features: [] });
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
+// Precipitation deep-dive: buckets + scatter + Pearson r
+app.get("/api/precip-analysis", async (req, res) => {
+  const { clause, params } = parseZctaFilters(req.query);
+  try {
+    const [scatter, buckets, corr] = await Promise.all([
+      pool.query(
+        `SELECT month_start::text AS month,
+                sum(offense_count)::int AS total,
+                round(sum(month_total_precip_mm)::numeric / nullif(count(DISTINCT zcta), 0), 1) AS precip_mm
+         FROM marts.mart_offense_monthly_zcta
+         WHERE month_start IS NOT NULL AND month_total_precip_mm IS NOT NULL ${clause}
+         GROUP BY month_start ORDER BY month_start`,
+        params,
+      ),
+      pool.query(
+        `WITH monthly AS (
+           SELECT month_start,
+                  sum(offense_count)::int AS total,
+                  sum(month_total_precip_mm)::float / nullif(count(DISTINCT zcta), 0) AS precip_mm
+           FROM marts.mart_offense_monthly_zcta
+           WHERE month_start IS NOT NULL AND month_total_precip_mm IS NOT NULL ${clause}
+           GROUP BY month_start
+         )
+         SELECT bucket,
+                count(*)::int AS month_count,
+                round(avg(total)::numeric, 0)::int AS avg_offenses
+         FROM (
+           SELECT total, precip_mm,
+                  CASE
+                    WHEN precip_mm < 50 THEN 'Dry (0-50mm)'
+                    WHEN precip_mm < 100 THEN 'Light (50-100mm)'
+                    WHEN precip_mm < 200 THEN 'Moderate (100-200mm)'
+                    ELSE 'Heavy (200+mm)'
+                  END AS bucket
+           FROM monthly
+         ) sub
+         GROUP BY bucket
+         ORDER BY CASE bucket
+           WHEN 'Dry (0-50mm)' THEN 1
+           WHEN 'Light (50-100mm)' THEN 2
+           WHEN 'Moderate (100-200mm)' THEN 3
+           ELSE 4 END`,
+        params,
+      ),
+      pool.query(
+        `WITH monthly AS (
+           SELECT month_start,
+                  sum(offense_count)::float AS total,
+                  sum(month_total_precip_mm)::float / nullif(count(DISTINCT zcta), 0) AS precip_mm
+           FROM marts.mart_offense_monthly_zcta
+           WHERE month_start IS NOT NULL AND month_total_precip_mm IS NOT NULL ${clause}
+           GROUP BY month_start
+         )
+         SELECT round(corr(total, precip_mm)::numeric, 3) AS r_precip
+         FROM monthly`,
+        params,
+      ),
+    ]);
+    res.json({
+      points: scatter.rows,
+      buckets: buckets.rows,
+      r_precip: corr.rows[0]?.r_precip ?? null,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
 // Legacy summary (kept for backward compat)
 app.get("/api/summary", async (_req, res) => {
   try {

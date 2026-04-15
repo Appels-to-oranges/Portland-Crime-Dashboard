@@ -7,6 +7,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2/dist/chartjs-chart-matrix.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -41,155 +43,36 @@
         }
       }
       * { box-sizing: border-box; margin: 0; }
-      body {
-        min-height: 100vh;
-        background: var(--bg);
-        color: var(--text);
-        line-height: 1.5;
-      }
-      header {
-        padding: 1.5rem 2rem 1rem;
-        max-width: 90rem;
-        margin: 0 auto;
-      }
-      header h1 {
-        font-size: 1.6rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-      }
-      header .sub {
-        color: var(--muted);
-        font-size: 0.9rem;
-        margin-top: 0.15rem;
-      }
-      .filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        padding: 0.75rem 2rem;
-        max-width: 90rem;
-        margin: 0 auto;
-        align-items: flex-end;
-      }
+      body { min-height: 100vh; background: var(--bg); color: var(--text); line-height: 1.5; }
+      header { padding: 1.5rem 2rem 1rem; max-width: 90rem; margin: 0 auto; }
+      header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+      header .sub { color: var(--muted); font-size: 0.9rem; margin-top: 0.15rem; }
+      .filters { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 2rem; max-width: 90rem; margin: 0 auto; align-items: flex-end; }
       .filter-group { display: flex; flex-direction: column; gap: 0.2rem; }
-      .filter-group label {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--muted);
-        font-weight: 600;
-      }
-      .filter-group select,
-      .filter-group input {
-        background: var(--surface);
-        color: var(--text);
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        padding: 0.4rem 0.6rem;
-        font-size: 0.85rem;
-        font-family: inherit;
-        min-width: 9rem;
-      }
-      .filter-group select:focus,
-      .filter-group input:focus {
-        outline: 2px solid var(--accent);
-        outline-offset: -1px;
-      }
-      .btn-reset {
-        background: var(--surface2);
-        color: var(--muted);
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        padding: 0.4rem 1rem;
-        font-size: 0.85rem;
-        cursor: pointer;
-        font-family: inherit;
-        align-self: flex-end;
-      }
+      .filter-group label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+      .filter-group select, .filter-group input { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.85rem; font-family: inherit; min-width: 9rem; }
+      .filter-group select:focus, .filter-group input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+      .btn-reset { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 1rem; font-size: 0.85rem; cursor: pointer; font-family: inherit; align-self: flex-end; }
       .btn-reset:hover { color: var(--text); }
-      .dashboard {
-        max-width: 90rem;
-        margin: 0 auto;
-        padding: 1rem 2rem 3rem;
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: 1fr 1fr 1fr 1fr;
-      }
-      .kpi {
-        background: var(--surface);
-        border-radius: 10px;
-        padding: 1.1rem 1.25rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      }
-      .kpi .label {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--muted);
-        font-weight: 600;
-      }
-      .kpi .value {
-        font-size: 1.7rem;
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
-        margin-top: 0.2rem;
-        color: var(--accent);
-      }
-      .kpi .detail {
-        font-size: 0.78rem;
-        color: var(--muted);
-        margin-top: 0.1rem;
-      }
-      .kpi .corr-row {
-        display: flex;
-        gap: 1.2rem;
-        margin-top: 0.35rem;
-      }
-      .kpi .corr-item {
-        display: flex;
-        flex-direction: column;
-      }
-      .kpi .corr-label {
-        font-size: 0.65rem;
-        text-transform: uppercase;
-        color: var(--muted);
-        letter-spacing: 0.04em;
-      }
-      .kpi .corr-val {
-        font-size: 1.3rem;
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
-      }
-      .chart-card {
-        background: var(--surface);
-        border-radius: 10px;
-        padding: 1.25rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        min-height: 22rem;
-        display: flex;
-        flex-direction: column;
-      }
+      .dashboard { max-width: 90rem; margin: 0 auto; padding: 1rem 2rem 3rem; display: grid; gap: 1rem; grid-template-columns: 1fr 1fr 1fr 1fr; }
+      .kpi { background: var(--surface); border-radius: 10px; padding: 1.1rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+      .kpi .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+      .kpi .value { font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 0.2rem; color: var(--accent); }
+      .kpi .detail { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+      .kpi .corr-row { display: flex; gap: 1.2rem; margin-top: 0.35rem; }
+      .kpi .corr-item { display: flex; flex-direction: column; }
+      .kpi .corr-label { font-size: 0.65rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; }
+      .kpi .corr-val { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .chart-card { background: var(--surface); border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); min-height: 22rem; display: flex; flex-direction: column; }
       .chart-card.wide { grid-column: span 2; }
       .chart-card.full { grid-column: span 4; }
-      .chart-card h2 {
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--muted);
-        font-weight: 600;
-        margin-bottom: 0.75rem;
-      }
-      .chart-wrap {
-        flex: 1;
-        position: relative;
-        min-height: 0;
-      }
-      .status-bar {
-        text-align: center;
-        padding: 0.5rem;
-        font-size: 0.8rem;
-        color: var(--muted);
-      }
+      .chart-card h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; margin-bottom: 0.75rem; }
+      .chart-wrap { flex: 1; position: relative; min-height: 0; }
+      #map { height: 100%; min-height: 28rem; border-radius: 6px; }
+      .map-legend { position: absolute; bottom: 24px; right: 10px; background: var(--surface); padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; z-index: 1000; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+      .map-legend .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+      .map-legend .lg-swatch { width: 18px; height: 12px; border-radius: 2px; display: inline-block; }
+      .status-bar { text-align: center; padding: 0.5rem; font-size: 0.8rem; color: var(--muted); }
       .status-bar.error { color: var(--error); }
       @media (max-width: 1100px) {
         .dashboard { grid-template-columns: 1fr 1fr; }
@@ -209,102 +92,65 @@
       <h1>Portland Crime Dashboard</h1>
       <p class="sub">Portland Police Bureau offense data with weather and demographic context</p>
     </header>
-
     <div class="filters" id="filter-bar">
-      <div class="filter-group">
-        <label for="f-start">From</label>
-        <input type="month" id="f-start" />
-      </div>
-      <div class="filter-group">
-        <label for="f-end">To</label>
-        <input type="month" id="f-end" />
-      </div>
-      <div class="filter-group">
-        <label for="f-neighborhood">Neighborhood</label>
-        <select id="f-neighborhood"><option value="">All</option></select>
-      </div>
-      <div class="filter-group">
-        <label for="f-category">Offense Category</label>
-        <select id="f-category"><option value="">All</option></select>
-      </div>
+      <div class="filter-group"><label for="f-start">From</label><input type="month" id="f-start" /></div>
+      <div class="filter-group"><label for="f-end">To</label><input type="month" id="f-end" /></div>
+      <div class="filter-group"><label for="f-neighborhood">Neighborhood</label><select id="f-neighborhood"><option value="">All</option></select></div>
+      <div class="filter-group"><label for="f-category">Offense Category</label><select id="f-category"><option value="">All</option></select></div>
       <button class="btn-reset" id="btn-reset">Reset</button>
     </div>
-
     <p class="status-bar" id="status">Loading dashboard...</p>
 
     <div class="dashboard" id="dashboard">
       <!-- KPI row -->
-      <div class="kpi">
-        <div class="label">Total Offenses</div>
-        <div class="value" id="kpi-total-val">&mdash;</div>
-        <div class="detail" id="kpi-total-detail"></div>
-      </div>
-      <div class="kpi">
-        <div class="label">Neighborhoods</div>
-        <div class="value" id="kpi-neighborhoods-val">&mdash;</div>
-        <div class="detail">reporting offenses</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Latest Month</div>
-        <div class="value" id="kpi-latest-val">&mdash;</div>
-        <div class="detail">most recent data</div>
-      </div>
+      <div class="kpi"><div class="label">Total Offenses</div><div class="value" id="kpi-total-val">&mdash;</div><div class="detail" id="kpi-total-detail"></div></div>
+      <div class="kpi"><div class="label">Neighborhoods</div><div class="value" id="kpi-neighborhoods-val">&mdash;</div><div class="detail">reporting offenses</div></div>
+      <div class="kpi"><div class="label">Latest Month</div><div class="value" id="kpi-latest-val">&mdash;</div><div class="detail">most recent data</div></div>
       <div class="kpi" id="kpi-corr">
         <div class="label">Weather Correlation</div>
         <div class="corr-row">
-          <div class="corr-item">
-            <span class="corr-label">Temp r</span>
-            <span class="corr-val" id="kpi-r-temp" style="color:var(--accent3)">&mdash;</span>
-          </div>
-          <div class="corr-item">
-            <span class="corr-label">Precip r</span>
-            <span class="corr-val" id="kpi-r-precip" style="color:var(--accent2)">&mdash;</span>
-          </div>
+          <div class="corr-item"><span class="corr-label">Temp r</span><span class="corr-val" id="kpi-r-temp" style="color:var(--accent3)">&mdash;</span></div>
+          <div class="corr-item"><span class="corr-label">Precip r</span><span class="corr-val" id="kpi-r-precip" style="color:var(--accent2)">&mdash;</span></div>
         </div>
         <div class="detail">Pearson r (-1 to +1)</div>
       </div>
 
-      <!-- Row 2: trend + category -->
-      <div class="chart-card wide">
-        <h2>Monthly Crime Trend</h2>
-        <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
-      </div>
-      <div class="chart-card wide">
-        <h2>Offenses by Category</h2>
-        <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+      <!-- Row 2: choropleth map -->
+      <div class="chart-card full" style="min-height:32rem">
+        <h2>Crime by ZCTA &mdash; Choropleth (offenses per 1,000 pop)</h2>
+        <div class="chart-wrap"><div id="map"></div></div>
       </div>
 
-      <!-- Row 3: neighborhoods + weather -->
+      <!-- Row 3: trend + category -->
+      <div class="chart-card wide"><h2>Monthly Crime Trend</h2><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
+      <div class="chart-card wide"><h2>Offenses by Category</h2><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
+
+      <!-- Row 4: neighborhoods + weather -->
+      <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
+      <div class="chart-card wide"><h2>Weather vs. Crime</h2><div class="chart-wrap"><canvas id="chart-weather"></canvas></div></div>
+
+      <!-- Row 5: precipitation deep-dive -->
       <div class="chart-card wide">
-        <h2>Top 15 Neighborhoods</h2>
-        <div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div>
+        <h2>Avg Monthly Offenses by Precipitation Level</h2>
+        <div class="chart-wrap"><canvas id="chart-precip-bucket"></canvas></div>
       </div>
       <div class="chart-card wide">
-        <h2>Weather vs. Crime</h2>
-        <div class="chart-wrap"><canvas id="chart-weather"></canvas></div>
+        <h2 id="precip-scatter-title">Precipitation vs. Crime</h2>
+        <div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div>
       </div>
 
-      <!-- Row 4: demographics -->
-      <div class="chart-card full">
-        <h2>Demographics &amp; Crime by ZCTA</h2>
-        <div class="chart-wrap"><canvas id="chart-demographics"></canvas></div>
-      </div>
+      <!-- Row 6: demographics -->
+      <div class="chart-card full"><h2>Demographics &amp; Crime by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
 
-      <!-- Row 5: heatmap -->
+      <!-- Row 7: seasonality matrix heatmap -->
       <div class="chart-card full" style="min-height:26rem">
-        <h2>Seasonality Heatmap &mdash; Month x Category (avg offenses)</h2>
+        <h2>Seasonality Matrix &mdash; Month x Category (avg offenses)</h2>
         <div class="chart-wrap"><canvas id="chart-heatmap"></canvas></div>
       </div>
 
-      <!-- Row 6: seasonality + correlation scatter -->
-      <div class="chart-card wide">
-        <h2>Seasonal Pattern (avg by month-of-year)</h2>
-        <div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div>
-      </div>
-      <div class="chart-card wide">
-        <h2 id="scatter-title">Temperature vs. Crime</h2>
-        <div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div>
-      </div>
+      <!-- Row 8: seasonality line + temp scatter -->
+      <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
+      <div class="chart-card wide"><h2 id="scatter-title">Temperature vs. Crime</h2><div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div></div>
     </div>
 
     <script>
@@ -327,7 +173,6 @@
           grid: isDark() ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
         };
       }
-
       function chartDefaults() {
         const c = themeColors();
         Chart.defaults.color = c.muted;
@@ -343,13 +188,13 @@
 
       const charts = {};
       const statusEl = $("status");
+      let leafletMap = null;
+      let geoLayer = null;
 
       function qs() {
         const p = new URLSearchParams();
-        const start = $("f-start").value;
-        const end = $("f-end").value;
-        const n = $("f-neighborhood").value;
-        const c = $("f-category").value;
+        const start = $("f-start").value, end = $("f-end").value;
+        const n = $("f-neighborhood").value, c = $("f-category").value;
         if (start) p.set("start", start);
         if (end) p.set("end", end);
         if (n) p.set("neighborhood", n);
@@ -357,12 +202,7 @@
         const s = p.toString();
         return s ? "?" + s : "";
       }
-
-      async function fetchJson(url) {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error(r.statusText);
-        return r.json();
-      }
+      async function fetchJson(url) { const r = await fetch(url); if (!r.ok) throw new Error(r.statusText); return r.json(); }
 
       const PALETTE = [];
       function ensurePalette() {
@@ -373,138 +213,146 @@
           "#06b6d4", "#84cc16", "#e11d48", "#0ea5e9", "#eab308");
       }
 
-      // ---------- FILTERS ----------
       async function loadFilters() {
         const data = await fetchJson("/api/filters");
-        const nSel = $("f-neighborhood");
-        const cSel = $("f-category");
-        data.neighborhoods.forEach((n) => {
-          const o = document.createElement("option");
-          o.value = n; o.textContent = n;
-          nSel.appendChild(o);
-        });
-        data.categories.forEach((c) => {
-          const o = document.createElement("option");
-          o.value = c; o.textContent = c;
-          cSel.appendChild(o);
-        });
+        const nSel = $("f-neighborhood"), cSel = $("f-category");
+        data.neighborhoods.forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = n; nSel.appendChild(o); });
+        data.categories.forEach((c) => { const o = document.createElement("option"); o.value = c; o.textContent = c; cSel.appendChild(o); });
         if (data.min_month) $("f-start").min = data.min_month;
         if (data.max_month) $("f-end").max = data.max_month;
+      }
+
+      // ---------- LEAFLET MAP ----------
+      const MAP_COLORS = ["#fee5d9","#fcbba1","#fc9272","#fb6a4a","#ef3b2c","#cb181d","#99000d"];
+      function rateColor(rate) {
+        const breaks = [5, 15, 30, 60, 100, 200];
+        for (let i = 0; i < breaks.length; i++) { if (rate <= breaks[i]) return MAP_COLORS[i]; }
+        return MAP_COLORS[6];
+      }
+
+      function initMap() {
+        if (leafletMap) return;
+        leafletMap = L.map("map", { zoomControl: true }).setView([45.52, -122.68], 11);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/" + (isDark() ? "dark_all" : "light_all") + "/{z}/{x}/{y}{r}.png", {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          subdomains: "abcd", maxZoom: 17,
+        }).addTo(leafletMap);
+
+        const legend = L.control({ position: "bottomright" });
+        legend.onAdd = function () {
+          const div = L.DomUtil.create("div", "map-legend");
+          const labels = ["0-5","5-15","15-30","30-60","60-100","100-200","200+"];
+          div.innerHTML = "<strong>Per 1k pop</strong>";
+          for (let i = 0; i < labels.length; i++) {
+            div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_COLORS[i]}"></span>${labels[i]}</div>`;
+          }
+          return div;
+        };
+        legend.addTo(leafletMap);
+      }
+
+      function renderMap(geojson) {
+        initMap();
+        if (geoLayer) { leafletMap.removeLayer(geoLayer); }
+        geoLayer = L.geoJSON(geojson, {
+          style(feature) {
+            return {
+              fillColor: rateColor(feature.properties.rate),
+              weight: 1, color: isDark() ? "#555" : "#999",
+              fillOpacity: 0.72,
+            };
+          },
+          onEachFeature(feature, layer) {
+            const p = feature.properties;
+            layer.bindTooltip(
+              `<strong>ZCTA ${p.zcta}</strong><br>Offenses: ${p.total.toLocaleString()}<br>Pop: ${p.population.toLocaleString()}<br>Rate: ${p.rate}/1k`,
+              { sticky: true }
+            );
+          },
+        }).addTo(leafletMap);
+        setTimeout(() => leafletMap.invalidateSize(), 100);
       }
 
       // ---------- TREND ----------
       function renderTrend(data) {
         const c = themeColors();
-        const labels = data.map((d) => d.month);
-        const values = data.map((d) => d.total);
-        if (charts.trend) {
-          charts.trend.data.labels = labels;
-          charts.trend.data.datasets[0].data = values;
-          charts.trend.update();
-          return;
-        }
-        charts.trend = new Chart($("chart-trend"), {
-          type: "line",
-          data: {
-            labels,
-            datasets: [{ label: "Offenses", data: values, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 6 }],
-          },
-          options: {
-            scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
-            plugins: { legend: { display: false } },
-            interaction: { intersect: false, mode: "index" },
-          },
-        });
+        const labels = data.map((d) => d.month), values = data.map((d) => d.total);
+        if (charts.trend) { charts.trend.data.labels = labels; charts.trend.data.datasets[0].data = values; charts.trend.update(); return; }
+        charts.trend = new Chart($("chart-trend"), { type: "line", data: { labels, datasets: [{ label: "Offenses", data: values, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 5 }] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false } }, interaction: { intersect: false, mode: "index" } } });
       }
 
       // ---------- CATEGORY ----------
       function renderCategory(data) {
         ensurePalette();
-        const labels = data.map((d) => d.category);
-        const values = data.map((d) => d.total);
-        const colors = data.map((_, i) => PALETTE[i % PALETTE.length]);
-        if (charts.category) {
-          charts.category.data.labels = labels;
-          charts.category.data.datasets[0].data = values;
-          charts.category.data.datasets[0].backgroundColor = colors;
-          charts.category.update();
-          return;
-        }
-        charts.category = new Chart($("chart-category"), {
-          type: "bar",
-          data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] },
-          options: {
-            indexAxis: "y",
-            scales: { x: { beginAtZero: true }, y: { grid: { display: false } } },
-            plugins: { legend: { display: false } },
-            onClick(_e, elems) {
-              if (!elems.length) return;
-              $("f-category").value = labels[elems[0].index];
-              refreshAll();
-            },
-          },
-        });
+        const labels = data.map((d) => d.category), values = data.map((d) => d.total), colors = data.map((_, i) => PALETTE[i % PALETTE.length]);
+        if (charts.category) { charts.category.data.labels = labels; charts.category.data.datasets[0].data = values; charts.category.data.datasets[0].backgroundColor = colors; charts.category.update(); return; }
+        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; $("f-category").value = labels[elems[0].index]; refreshAll(); } } });
       }
 
       // ---------- NEIGHBORHOOD ----------
       function renderNeighborhood(data) {
         const c = themeColors();
-        const labels = data.map((d) => d.neighborhood);
-        const values = data.map((d) => d.total);
-        if (charts.neighborhood) {
-          charts.neighborhood.data.labels = labels;
-          charts.neighborhood.data.datasets[0].data = values;
-          charts.neighborhood.update();
-          return;
-        }
-        charts.neighborhood = new Chart($("chart-neighborhood"), {
-          type: "bar",
-          data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] },
-          options: {
-            indexAxis: "y",
-            scales: { x: { beginAtZero: true }, y: { grid: { display: false } } },
-            plugins: { legend: { display: false } },
-            onClick(_e, elems) {
-              if (!elems.length) return;
-              $("f-neighborhood").value = labels[elems[0].index];
-              refreshAll();
-            },
-          },
-        });
+        const labels = data.map((d) => d.neighborhood), values = data.map((d) => d.total);
+        if (charts.neighborhood) { charts.neighborhood.data.labels = labels; charts.neighborhood.data.datasets[0].data = values; charts.neighborhood.update(); return; }
+        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; $("f-neighborhood").value = labels[elems[0].index]; refreshAll(); } } });
       }
 
       // ---------- WEATHER ----------
       function renderWeather(data) {
         const c = themeColors();
-        const labels = data.map((d) => d.month);
-        const crime = data.map((d) => d.total);
-        const temp = data.map((d) => parseFloat(d.avg_high_c));
-        const precip = data.map((d) => parseFloat(d.avg_precip_mm));
-        if (charts.weather) {
-          charts.weather.data.labels = labels;
-          charts.weather.data.datasets[0].data = crime;
-          charts.weather.data.datasets[1].data = temp;
-          charts.weather.data.datasets[2].data = precip;
-          charts.weather.update();
+        const labels = data.map((d) => d.month), crime = data.map((d) => d.total), temp = data.map((d) => parseFloat(d.avg_high_c)), precip = data.map((d) => parseFloat(d.avg_precip_mm));
+        if (charts.weather) { charts.weather.data.labels = labels; charts.weather.data.datasets[0].data = crime; charts.weather.data.datasets[1].data = temp; charts.weather.data.datasets[2].data = precip; charts.weather.update(); return; }
+        charts.weather = new Chart($("chart-weather"), { type: "line", data: { labels, datasets: [
+          { label: "Offenses", data: crime, borderColor: c.accent, backgroundColor: c.accent + "22", yAxisID: "y", tension: 0.3, pointRadius: 2 },
+          { label: "Avg High (\u00B0C)", data: temp, borderColor: c.accent3, borderDash: [4, 3], yAxisID: "y1", tension: 0.3, pointRadius: 2 },
+          { label: "Precip (mm)", data: precip, borderColor: c.accent2, borderDash: [2, 2], yAxisID: "y1", tension: 0.3, pointRadius: 2 },
+        ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Offenses" } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp / Precip" } } }, interaction: { intersect: false, mode: "index" } } });
+      }
+
+      // ---------- PRECIP BUCKETS ----------
+      function renderPrecipBuckets(precipData) {
+        const c = themeColors();
+        const buckets = precipData.buckets;
+        const labels = buckets.map((b) => b.bucket);
+        const values = buckets.map((b) => b.avg_offenses);
+        const counts = buckets.map((b) => b.month_count);
+        const colors = ["#93c5fd", "#60a5fa", "#3b82f6", "#1d4ed8"];
+
+        if (charts.precipBucket) {
+          charts.precipBucket.data.labels = labels;
+          charts.precipBucket.data.datasets[0].data = values;
+          charts.precipBucket.update();
           return;
         }
-        charts.weather = new Chart($("chart-weather"), {
-          type: "line",
-          data: {
-            labels,
-            datasets: [
-              { label: "Offenses", data: crime, borderColor: c.accent, backgroundColor: c.accent + "22", yAxisID: "y", tension: 0.3, pointRadius: 2 },
-              { label: "Avg High (\u00B0C)", data: temp, borderColor: c.accent3, borderDash: [4, 3], yAxisID: "y1", tension: 0.3, pointRadius: 2 },
-              { label: "Precip (mm)", data: precip, borderColor: c.accent2, borderDash: [2, 2], yAxisID: "y1", tension: 0.3, pointRadius: 2 },
-            ],
-          },
+        charts.precipBucket = new Chart($("chart-precip-bucket"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Avg Monthly Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] },
           options: {
-            scales: {
-              x: { grid: { display: false } },
-              y: { position: "left", beginAtZero: true, title: { display: true, text: "Offenses" } },
-              y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp / Precip" } },
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "Avg Monthly Offenses" } } },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { afterLabel(ctx) { return `(${counts[ctx.dataIndex]} months in bucket)`; } } },
             },
-            interaction: { intersect: false, mode: "index" },
+          },
+        });
+      }
+
+      // ---------- PRECIP SCATTER ----------
+      function renderPrecipScatter(precipData) {
+        const c = themeColors();
+        const pts = precipData.points
+          .filter((d) => d.precip_mm != null)
+          .map((d) => ({ x: parseFloat(d.precip_mm), y: d.total, month: d.month }));
+        const rVal = precipData.r_precip;
+        $("precip-scatter-title").textContent = `Precipitation vs. Crime (r = ${rVal != null ? rVal : "N/A"})`;
+
+        if (charts.precipScatter) { charts.precipScatter.data.datasets[0].data = pts; charts.precipScatter.update(); return; }
+        charts.precipScatter = new Chart($("chart-precip-scatter"), {
+          type: "scatter",
+          data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent2 + "aa", borderColor: c.accent2, pointRadius: 5, pointHoverRadius: 8 }] },
+          options: {
+            scales: { x: { title: { display: true, text: "Monthly Precip (mm)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Precip: ${d.x}mm`, `Offenses: ${d.y.toLocaleString()}`]; } } } },
           },
         });
       }
@@ -512,183 +360,47 @@
       // ---------- DEMOGRAPHICS ----------
       function renderDemographics(data) {
         const c = themeColors();
-        const pts = data
-          .filter((d) => d.population > 0 && d.poverty_rate_pct != null)
-          .map((d) => ({
-            x: parseFloat(d.poverty_rate_pct),
-            y: (d.total_offenses / d.population) * 1000,
-            r: Math.max(3, Math.sqrt(d.population) / 8),
-            zcta: d.zcta, pop: d.population, income: d.median_income, offenses: d.total_offenses,
-          }));
-        if (charts.demographics) {
-          charts.demographics.data.datasets[0].data = pts;
-          charts.demographics.update();
-          return;
-        }
-        charts.demographics = new Chart($("chart-demographics"), {
-          type: "bubble",
-          data: { datasets: [{ label: "ZCTAs", data: pts, backgroundColor: c.accent4 + "99", borderColor: c.accent4, borderWidth: 1 }] },
-          options: {
-            scales: {
-              x: { title: { display: true, text: "Poverty Rate (%)" }, beginAtZero: true },
-              y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true },
-            },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label(ctx) {
-                    const d = ctx.raw;
-                    return [`ZCTA ${d.zcta}`, `Pop: ${d.pop.toLocaleString()}`, `Poverty: ${d.x}%`, `Income: $${(d.income||0).toLocaleString()}`, `Offenses/1k: ${d.y.toFixed(1)}`];
-                  },
-                },
-              },
-            },
-          },
-        });
+        const pts = data.filter((d) => d.population > 0 && d.poverty_rate_pct != null).map((d) => ({
+          x: parseFloat(d.poverty_rate_pct), y: (d.total_offenses / d.population) * 1000,
+          r: Math.max(3, Math.sqrt(d.population) / 8), zcta: d.zcta, pop: d.population, income: d.median_income, offenses: d.total_offenses,
+        }));
+        if (charts.demographics) { charts.demographics.data.datasets[0].data = pts; charts.demographics.update(); return; }
+        charts.demographics = new Chart($("chart-demographics"), { type: "bubble", data: { datasets: [{ label: "ZCTAs", data: pts, backgroundColor: c.accent4 + "99", borderColor: c.accent4, borderWidth: 1 }] }, options: { scales: { x: { title: { display: true, text: "Poverty Rate (%)" }, beginAtZero: true }, y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`ZCTA ${d.zcta}`, `Pop: ${d.pop.toLocaleString()}`, `Poverty: ${d.x}%`, `Income: $${(d.income||0).toLocaleString()}`, `Offenses/1k: ${d.y.toFixed(1)}`]; } } } } } });
       }
 
       // ---------- HEATMAP ----------
       function heatColor(val, max) {
         const t = max > 0 ? val / max : 0;
-        const r = Math.round(30 + 225 * t);
-        const g = Math.round(100 + 80 * (1 - t));
-        const b = Math.round(220 - 180 * t);
+        const r = Math.round(30 + 225 * t), g = Math.round(100 + 80 * (1 - t)), b = Math.round(220 - 180 * t);
         return `rgba(${r},${g},${b},0.85)`;
       }
-
       function renderHeatmap(data) {
         const cats = [...new Set(data.map((d) => d.category))].sort();
         const maxVal = Math.max(...data.map((d) => d.avg_total), 1);
-        const pts = data.map((d) => ({
-          x: MONTHS[d.month_num - 1],
-          y: d.category,
-          v: d.avg_total,
-        }));
-
-        if (charts.heatmap) {
-          charts.heatmap.data.datasets[0].data = pts;
-          charts.heatmap.update();
-          return;
-        }
-        charts.heatmap = new Chart($("chart-heatmap"), {
-          type: "matrix",
-          data: {
-            datasets: [{
-              label: "Avg Offenses",
-              data: pts,
-              backgroundColor(ctx) {
-                const v = ctx.dataset.data[ctx.dataIndex];
-                return v ? heatColor(v.v, maxVal) : "transparent";
-              },
-              width: ({ chart }) => (chart.chartArea || {}).width / 12 - 2,
-              height: ({ chart }) => (chart.chartArea || {}).height / Math.max(cats.length, 1) - 2,
-            }],
-          },
-          options: {
-            scales: {
-              x: { type: "category", labels: MONTHS, grid: { display: false }, title: { display: true, text: "Month" } },
-              y: { type: "category", labels: cats, grid: { display: false }, offset: true, reverse: true },
-            },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  title(items) { return items[0]?.raw ? `${items[0].raw.x} \u2014 ${items[0].raw.y}` : ""; },
-                  label(ctx) { return `Avg: ${ctx.raw.v}`; },
-                },
-              },
-            },
-          },
-        });
+        const pts = data.map((d) => ({ x: MONTHS[d.month_num - 1], y: d.category, v: d.avg_total }));
+        if (charts.heatmap) { charts.heatmap.data.datasets[0].data = pts; charts.heatmap.update(); return; }
+        charts.heatmap = new Chart($("chart-heatmap"), { type: "matrix", data: { datasets: [{ label: "Avg Offenses", data: pts, backgroundColor(ctx) { const v = ctx.dataset.data[ctx.dataIndex]; return v ? heatColor(v.v, maxVal) : "transparent"; }, width: ({ chart }) => (chart.chartArea || {}).width / 12 - 2, height: ({ chart }) => (chart.chartArea || {}).height / Math.max(cats.length, 1) - 2 }] }, options: { scales: { x: { type: "category", labels: MONTHS, grid: { display: false }, title: { display: true, text: "Month" } }, y: { type: "category", labels: cats, grid: { display: false }, offset: true, reverse: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { title(items) { return items[0]?.raw ? `${items[0].raw.x} \u2014 ${items[0].raw.y}` : ""; }, label(ctx) { return `Avg: ${ctx.raw.v}`; } } } } } });
       }
 
       // ---------- SEASONALITY ----------
       function renderSeasonality(data) {
         const c = themeColors();
-        const labels = data.map((d) => d.month_name);
-        const offenses = data.map((d) => d.avg_offenses);
-        const temp = data.map((d) => parseFloat(d.avg_high_c));
-        const precip = data.map((d) => parseFloat(d.avg_precip_mm));
-
-        if (charts.seasonality) {
-          charts.seasonality.data.labels = labels;
-          charts.seasonality.data.datasets[0].data = offenses;
-          charts.seasonality.data.datasets[1].data = temp;
-          charts.seasonality.data.datasets[2].data = precip;
-          charts.seasonality.update();
-          return;
-        }
-        charts.seasonality = new Chart($("chart-seasonality"), {
-          type: "line",
-          data: {
-            labels,
-            datasets: [
-              { label: "Avg Offenses", data: offenses, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, yAxisID: "y", tension: 0.4, pointRadius: 4 },
-              { label: "Avg High (\u00B0C)", data: temp, borderColor: c.accent3, borderDash: [5, 3], yAxisID: "y1", tension: 0.4, pointRadius: 4 },
-              { label: "Avg Precip (mm)", data: precip, borderColor: c.accent2, borderDash: [3, 3], yAxisID: "y1", tension: 0.4, pointRadius: 4 },
-            ],
-          },
-          options: {
-            scales: {
-              x: { grid: { display: false } },
-              y: { position: "left", beginAtZero: true, title: { display: true, text: "Avg Offenses" } },
-              y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp / Precip" } },
-            },
-            interaction: { intersect: false, mode: "index" },
-          },
-        });
+        const labels = data.map((d) => d.month_name), offenses = data.map((d) => d.avg_offenses), temp = data.map((d) => parseFloat(d.avg_high_c)), precip = data.map((d) => parseFloat(d.avg_precip_mm));
+        if (charts.seasonality) { charts.seasonality.data.labels = labels; charts.seasonality.data.datasets[0].data = offenses; charts.seasonality.data.datasets[1].data = temp; charts.seasonality.data.datasets[2].data = precip; charts.seasonality.update(); return; }
+        charts.seasonality = new Chart($("chart-seasonality"), { type: "line", data: { labels, datasets: [
+          { label: "Avg Offenses", data: offenses, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, yAxisID: "y", tension: 0.4, pointRadius: 4 },
+          { label: "Avg High (\u00B0C)", data: temp, borderColor: c.accent3, borderDash: [5, 3], yAxisID: "y1", tension: 0.4, pointRadius: 4 },
+          { label: "Avg Precip (mm)", data: precip, borderColor: c.accent2, borderDash: [3, 3], yAxisID: "y1", tension: 0.4, pointRadius: 4 },
+        ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Avg Offenses" } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp / Precip" } } }, interaction: { intersect: false, mode: "index" } } });
       }
 
-      // ---------- CORRELATION SCATTER ----------
+      // ---------- TEMP SCATTER ----------
       function renderCorrScatter(corrData) {
         const c = themeColors();
-        const pts = corrData.points
-          .filter((d) => d.avg_high_c != null)
-          .map((d) => ({
-            x: parseFloat(d.avg_high_c),
-            y: d.total,
-            month: d.month,
-          }));
-
-        const rTemp = corrData.r_temp;
-        $("scatter-title").textContent = `Temperature vs. Crime (r = ${rTemp != null ? rTemp : "N/A"})`;
-
-        if (charts.corrScatter) {
-          charts.corrScatter.data.datasets[0].data = pts;
-          charts.corrScatter.update();
-          return;
-        }
-        charts.corrScatter = new Chart($("chart-corr-scatter"), {
-          type: "scatter",
-          data: {
-            datasets: [{
-              label: "Monthly",
-              data: pts,
-              backgroundColor: c.accent3 + "aa",
-              borderColor: c.accent3,
-              pointRadius: 5,
-              pointHoverRadius: 8,
-            }],
-          },
-          options: {
-            scales: {
-              x: { title: { display: true, text: "Avg High Temp (\u00B0C)" } },
-              y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true },
-            },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label(ctx) {
-                    const d = ctx.raw;
-                    return [`Month: ${d.month}`, `Temp: ${d.x}\u00B0C`, `Offenses: ${d.y.toLocaleString()}`];
-                  },
-                },
-              },
-            },
-          },
-        });
+        const pts = corrData.points.filter((d) => d.avg_high_c != null).map((d) => ({ x: parseFloat(d.avg_high_c), y: d.total, month: d.month }));
+        $("scatter-title").textContent = `Temperature vs. Crime (r = ${corrData.r_temp != null ? corrData.r_temp : "N/A"})`;
+        if (charts.corrScatter) { charts.corrScatter.data.datasets[0].data = pts; charts.corrScatter.update(); return; }
+        charts.corrScatter = new Chart($("chart-corr-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent3 + "aa", borderColor: c.accent3, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Avg High Temp (\u00B0C)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Temp: ${d.x}\u00B0C`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
       }
 
       // ---------- KPIs ----------
@@ -698,9 +410,7 @@
         const months = trend.length;
         $("kpi-total-detail").textContent = months ? `across ${months} month${months !== 1 ? "s" : ""}` : "";
         $("kpi-neighborhoods-val").textContent = neighborhood.length.toLocaleString();
-        if (trend.length) {
-          $("kpi-latest-val").textContent = trend[trend.length - 1].month_label || trend[trend.length - 1].month;
-        }
+        if (trend.length) $("kpi-latest-val").textContent = trend[trend.length - 1].month_label || trend[trend.length - 1].month;
         $("kpi-r-temp").textContent = corrData.r_temp != null ? corrData.r_temp : "\u2014";
         $("kpi-r-precip").textContent = corrData.r_precip != null ? corrData.r_precip : "\u2014";
       }
@@ -711,21 +421,20 @@
         statusEl.classList.remove("error");
         try {
           const q = qs();
-          const [trend, cat, neigh, weather, demo, heatmap, seasonal, corr] = await Promise.all([
-            fetchJson("/api/trend" + q),
-            fetchJson("/api/by-category" + q),
-            fetchJson("/api/by-neighborhood" + q),
-            fetchJson("/api/weather-crime" + q),
-            fetchJson("/api/demographics" + q),
-            fetchJson("/api/heatmap" + q),
-            fetchJson("/api/seasonality" + q),
-            fetchJson("/api/correlation" + q),
+          const [trend, cat, neigh, weather, demo, heatmap, seasonal, corr, geo, precip] = await Promise.all([
+            fetchJson("/api/trend" + q), fetchJson("/api/by-category" + q), fetchJson("/api/by-neighborhood" + q),
+            fetchJson("/api/weather-crime" + q), fetchJson("/api/demographics" + q), fetchJson("/api/heatmap" + q),
+            fetchJson("/api/seasonality" + q), fetchJson("/api/correlation" + q), fetchJson("/api/geo" + q),
+            fetchJson("/api/precip-analysis" + q),
           ]);
           updateKPIs(trend, neigh, corr);
+          renderMap(geo);
           renderTrend(trend);
           renderCategory(cat);
           renderNeighborhood(neigh);
           renderWeather(weather);
+          renderPrecipBuckets(precip);
+          renderPrecipScatter(precip);
           renderDemographics(demo);
           renderHeatmap(heatmap);
           renderSeasonality(seasonal);
@@ -746,19 +455,9 @@
         $("f-end").addEventListener("change", refreshAll);
         $("f-neighborhood").addEventListener("change", refreshAll);
         $("f-category").addEventListener("change", refreshAll);
-        $("btn-reset").addEventListener("click", () => {
-          $("f-start").value = "";
-          $("f-end").value = "";
-          $("f-neighborhood").value = "";
-          $("f-category").value = "";
-          refreshAll();
-        });
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-          chartDefaults();
-          Object.values(charts).forEach((ch) => ch.update());
-        });
+        $("btn-reset").addEventListener("click", () => { $("f-start").value = ""; $("f-end").value = ""; $("f-neighborhood").value = ""; $("f-category").value = ""; refreshAll(); });
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { chartDefaults(); Object.values(charts).forEach((ch) => ch.update()); });
       }
-
       init();
     })();
     </script>
