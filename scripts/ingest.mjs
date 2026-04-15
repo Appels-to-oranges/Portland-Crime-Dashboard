@@ -9,7 +9,10 @@ import { getPgConfig } from "./lib/db-config.mjs";
 
 const BASE_URL =
   "https://public.tableau.com/views/PPBOpenDataDownloads/New_Offense_Data_";
-const DEFAULT_YEARS = "2022,2023,2024,2025,2026";
+
+function currentYearDefault() {
+  return String(new Date().getFullYear());
+}
 
 function buildUrl(year) {
   if (process.env.OFFENSE_CSV_URL) return process.env.OFFENSE_CSV_URL;
@@ -37,7 +40,8 @@ const COPY_SQL = `
 `;
 
 async function main() {
-  const years = (process.env.OFFENSE_YEARS || DEFAULT_YEARS)
+  const fullRefresh = process.env.FULL_REFRESH === "1";
+  const years = (process.env.OFFENSE_YEARS || currentYearDefault())
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -74,7 +78,19 @@ async function main() {
   const tmpDir = await mkdtemp(path.join(tmpdir(), "ppb-csv-"));
   try {
     await client.query("BEGIN");
-    await client.query("TRUNCATE TABLE raw.offenses");
+
+    if (fullRefresh) {
+      console.error("FULL_REFRESH=1 — truncating all rows.");
+      await client.query("TRUNCATE TABLE raw.offenses");
+    } else {
+      for (const year of years) {
+        await client.query(
+          `DELETE FROM raw.offenses WHERE report_month_year LIKE '%' || $1`,
+          [year],
+        );
+        console.error(`Cleared existing rows for ${year}.`);
+      }
+    }
 
     for (const year of years) {
       const url = buildUrl(year);
@@ -88,7 +104,8 @@ async function main() {
     }
 
     await client.query("COMMIT");
-    console.error(`Ingest complete: raw.offenses loaded (${years.join(", ")}).`);
+    const mode = fullRefresh ? "full refresh" : "incremental";
+    console.error(`Ingest complete (${mode}): raw.offenses loaded (${years.join(", ")}).`);
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     throw e;

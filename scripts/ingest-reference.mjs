@@ -14,7 +14,7 @@ const ZCTA_CB_ZIP_URL =
 const ACS_YEAR = process.env.CENSUS_ACS_YEAR || "2022";
 const WEATHER_LAT = Number(process.env.WEATHER_LAT || "45.5152");
 const WEATHER_LON = Number(process.env.WEATHER_LON || "-122.6784");
-const WEATHER_START = process.env.WEATHER_START || "2015-01-01";
+const WEATHER_START = process.env.WEATHER_START || "2022-01-01";
 const WEATHER_END = process.env.WEATHER_END || new Date().toISOString().slice(0, 10);
 
 const UA = { "User-Agent": "portland-crime-dashboard/1.0 (reference data)" };

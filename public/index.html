@@ -6,7 +6,6 @@
     <title>Portland Crime Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2/dist/chartjs-chart-matrix.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -139,16 +138,16 @@
         <div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div>
       </div>
 
+      <!-- Row 5b: per-category precip correlation -->
+      <div class="chart-card full">
+        <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
+        <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
+      </div>
+
       <!-- Row 6: demographics -->
       <div class="chart-card full"><h2>Demographics &amp; Crime by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
 
-      <!-- Row 7: seasonality matrix heatmap -->
-      <div class="chart-card full" style="min-height:26rem">
-        <h2>Seasonality Matrix &mdash; Month x Category (avg offenses)</h2>
-        <div class="chart-wrap"><canvas id="chart-heatmap"></canvas></div>
-      </div>
-
-      <!-- Row 8: seasonality line + temp scatter -->
+      <!-- Row 7: seasonality line + temp scatter -->
       <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
       <div class="chart-card wide"><h2 id="scatter-title">Temperature vs. Crime</h2><div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div></div>
     </div>
@@ -286,7 +285,7 @@
         ensurePalette();
         const labels = data.map((d) => d.category), values = data.map((d) => d.total), colors = data.map((_, i) => PALETTE[i % PALETTE.length]);
         if (charts.category) { charts.category.data.labels = labels; charts.category.data.datasets[0].data = values; charts.category.data.datasets[0].backgroundColor = colors; charts.category.update(); return; }
-        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; $("f-category").value = labels[elems[0].index]; refreshAll(); } } });
+        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = labels[elems[0].index]; $("f-category").value = $("f-category").value === clicked ? "" : clicked; refreshAll(); } } });
       }
 
       // ---------- NEIGHBORHOOD ----------
@@ -294,7 +293,7 @@
         const c = themeColors();
         const labels = data.map((d) => d.neighborhood), values = data.map((d) => d.total);
         if (charts.neighborhood) { charts.neighborhood.data.labels = labels; charts.neighborhood.data.datasets[0].data = values; charts.neighborhood.update(); return; }
-        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; $("f-neighborhood").value = labels[elems[0].index]; refreshAll(); } } });
+        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = labels[elems[0].index]; $("f-neighborhood").value = $("f-neighborhood").value === clicked ? "" : clicked; refreshAll(); } } });
       }
 
       // ---------- WEATHER ----------
@@ -337,6 +336,45 @@
         });
       }
 
+      // ---------- PRECIP BY CATEGORY ----------
+      function renderPrecipCategory(data) {
+        const c = themeColors();
+        const sorted = [...data].sort((a, b) => (b.r_precip ?? -2) - (a.r_precip ?? -2));
+        const labels = sorted.map((d) => d.category);
+        const values = sorted.map((d) => parseFloat(d.r_precip) || 0);
+        const colors = values.map((v) => {
+          if (v >= 0.5) return "#ef4444";
+          if (v >= 0.3) return "#f97316";
+          if (v >= 0) return "#eab308";
+          if (v >= -0.3) return "#22d3ee";
+          return "#3b82f6";
+        });
+
+        if (charts.precipCategory) {
+          charts.precipCategory.data.labels = labels;
+          charts.precipCategory.data.datasets[0].data = values;
+          charts.precipCategory.data.datasets[0].backgroundColor = colors;
+          charts.precipCategory.update();
+          return;
+        }
+        charts.precipCategory = new Chart($("chart-precip-category"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Pearson r", data: values, backgroundColor: colors, borderRadius: 4 }] },
+          options: {
+            indexAxis: "y",
+            scales: {
+              x: { min: -1, max: 1, title: { display: true, text: "Pearson r (precip vs. offenses)" },
+                grid: { color(ctx) { return ctx.tick.value === 0 ? c.text : c.grid; } } },
+              y: { grid: { display: false } },
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return `Avg monthly: ${d.avg_offenses} offenses (${d.months} months)`; } } },
+            },
+          },
+        });
+      }
+
       // ---------- PRECIP SCATTER ----------
       function renderPrecipScatter(precipData) {
         const c = themeColors();
@@ -366,20 +404,6 @@
         }));
         if (charts.demographics) { charts.demographics.data.datasets[0].data = pts; charts.demographics.update(); return; }
         charts.demographics = new Chart($("chart-demographics"), { type: "bubble", data: { datasets: [{ label: "ZCTAs", data: pts, backgroundColor: c.accent4 + "99", borderColor: c.accent4, borderWidth: 1 }] }, options: { scales: { x: { title: { display: true, text: "Poverty Rate (%)" }, beginAtZero: true }, y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`ZCTA ${d.zcta}`, `Pop: ${d.pop.toLocaleString()}`, `Poverty: ${d.x}%`, `Income: $${(d.income||0).toLocaleString()}`, `Offenses/1k: ${d.y.toFixed(1)}`]; } } } } } });
-      }
-
-      // ---------- HEATMAP ----------
-      function heatColor(val, max) {
-        const t = max > 0 ? val / max : 0;
-        const r = Math.round(30 + 225 * t), g = Math.round(100 + 80 * (1 - t)), b = Math.round(220 - 180 * t);
-        return `rgba(${r},${g},${b},0.85)`;
-      }
-      function renderHeatmap(data) {
-        const cats = [...new Set(data.map((d) => d.category))].sort();
-        const maxVal = Math.max(...data.map((d) => d.avg_total), 1);
-        const pts = data.map((d) => ({ x: MONTHS[d.month_num - 1], y: d.category, v: d.avg_total }));
-        if (charts.heatmap) { charts.heatmap.data.datasets[0].data = pts; charts.heatmap.update(); return; }
-        charts.heatmap = new Chart($("chart-heatmap"), { type: "matrix", data: { datasets: [{ label: "Avg Offenses", data: pts, backgroundColor(ctx) { const v = ctx.dataset.data[ctx.dataIndex]; return v ? heatColor(v.v, maxVal) : "transparent"; }, width: ({ chart }) => (chart.chartArea || {}).width / 12 - 2, height: ({ chart }) => (chart.chartArea || {}).height / Math.max(cats.length, 1) - 2 }] }, options: { scales: { x: { type: "category", labels: MONTHS, grid: { display: false }, title: { display: true, text: "Month" } }, y: { type: "category", labels: cats, grid: { display: false }, offset: true, reverse: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { title(items) { return items[0]?.raw ? `${items[0].raw.x} \u2014 ${items[0].raw.y}` : ""; }, label(ctx) { return `Avg: ${ctx.raw.v}`; } } } } } });
       }
 
       // ---------- SEASONALITY ----------
@@ -421,11 +445,11 @@
         statusEl.classList.remove("error");
         try {
           const q = qs();
-          const [trend, cat, neigh, weather, demo, heatmap, seasonal, corr, geo, precip] = await Promise.all([
+          const [trend, cat, neigh, weather, demo, seasonal, corr, geo, precip, precipCat] = await Promise.all([
             fetchJson("/api/trend" + q), fetchJson("/api/by-category" + q), fetchJson("/api/by-neighborhood" + q),
-            fetchJson("/api/weather-crime" + q), fetchJson("/api/demographics" + q), fetchJson("/api/heatmap" + q),
+            fetchJson("/api/weather-crime" + q), fetchJson("/api/demographics" + q),
             fetchJson("/api/seasonality" + q), fetchJson("/api/correlation" + q), fetchJson("/api/geo" + q),
-            fetchJson("/api/precip-analysis" + q),
+            fetchJson("/api/precip-analysis" + q), fetchJson("/api/precip-by-category" + q),
           ]);
           updateKPIs(trend, neigh, corr);
           renderMap(geo);
@@ -435,8 +459,8 @@
           renderWeather(weather);
           renderPrecipBuckets(precip);
           renderPrecipScatter(precip);
+          renderPrecipCategory(precipCat);
           renderDemographics(demo);
-          renderHeatmap(heatmap);
           renderSeasonality(seasonal);
           renderCorrScatter(corr);
           statusEl.textContent = "";

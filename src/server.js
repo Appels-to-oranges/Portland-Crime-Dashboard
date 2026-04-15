@@ -393,6 +393,39 @@ app.get("/api/precip-analysis", async (req, res) => {
   }
 });
 
+// Per-category precipitation correlation (Pearson r for each offense category)
+app.get("/api/precip-by-category", async (req, res) => {
+  const { clause, params } = parseZctaFilters(req.query);
+  try {
+    const { rows } = await pool.query(
+      `WITH monthly AS (
+         SELECT month_start,
+                offense_category AS category,
+                sum(offense_count)::float AS total,
+                sum(month_total_precip_mm)::float / nullif(count(DISTINCT zcta), 0) AS precip_mm
+         FROM marts.mart_offense_monthly_zcta
+         WHERE month_start IS NOT NULL
+           AND month_total_precip_mm IS NOT NULL
+           AND offense_category IS NOT NULL ${clause}
+         GROUP BY month_start, offense_category
+       )
+       SELECT category,
+              round(corr(total, precip_mm)::numeric, 3) AS r_precip,
+              count(*)::int AS months,
+              round(avg(total)::numeric, 0)::int AS avg_offenses
+       FROM monthly
+       GROUP BY category
+       HAVING count(*) >= 6
+       ORDER BY corr(total, precip_mm) DESC NULLS LAST`,
+      params,
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
 // Legacy summary (kept for backward compat)
 app.get("/api/summary", async (_req, res) => {
   try {
