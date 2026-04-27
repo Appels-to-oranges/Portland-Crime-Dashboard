@@ -370,7 +370,7 @@
         const c = themeColors();
         const labels = data.map((d) => d.neighborhood), values = data.map((d) => d.total);
         if (charts.neighborhood) { charts.neighborhood.data.labels = labels; charts.neighborhood.data.datasets[0].data = values; charts.neighborhood.update(); return; }
-        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = labels[elems[0].index]; $("f-neighborhood").value = $("f-neighborhood").value === clicked ? "" : clicked; refreshAll(); } } });
+        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false }, ticks: { autoSkip: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = labels[elems[0].index]; $("f-neighborhood").value = $("f-neighborhood").value === clicked ? "" : clicked; refreshAll(); } } });
       }
 
       // ---------- PRECIP BY CATEGORY ----------
@@ -422,13 +422,11 @@
         const labels = data.map((d) => d.month_name);
         const offenses = data.map((d) => d.avg_offenses);
         const temp = data.map((d) => { const v = parseFloat(d.avg_high_c); return isNaN(v) ? null : Math.round(cToF(v)); });
-        const precip = data.map((d) => parseFloat(d.avg_precip_mm));
-        if (charts.seasonality) { charts.seasonality.data.labels = labels; charts.seasonality.data.datasets[0].data = offenses; charts.seasonality.data.datasets[1].data = temp; charts.seasonality.data.datasets[2].data = precip; charts.seasonality.update(); return; }
+        if (charts.seasonality) { charts.seasonality.data.labels = labels; charts.seasonality.data.datasets[0].data = offenses; charts.seasonality.data.datasets[1].data = temp; charts.seasonality.update(); return; }
         charts.seasonality = new Chart($("chart-seasonality"), { type: "line", data: { labels, datasets: [
           { label: "Avg Offenses", data: offenses, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, yAxisID: "y", tension: 0.4, pointRadius: 4 },
           { label: "Avg High (\u00B0F)", data: temp, borderColor: c.accent3, borderDash: [5, 3], yAxisID: "y1", tension: 0.4, pointRadius: 4 },
-          { label: "Avg Precip (mm)", data: precip, borderColor: c.accent2, borderDash: [3, 3], yAxisID: "y1", tension: 0.4, pointRadius: 4 },
-        ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Avg Offenses" } }, y1: { position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: "Temp (\u00B0F) / Precip (mm)" } } }, interaction: { intersect: false, mode: "index" } } });
+        ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Avg Offenses" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "Avg High Temp (\u00B0F)" } } }, interaction: { intersect: false, mode: "index" } } });
       }
 
       // ---------- TEMP SCATTER ----------
