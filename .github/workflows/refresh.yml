@@ -28,25 +28,25 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/pip install -r dbt/requirements.txt
+          echo "${{ github.workspace }}/.venv/bin" >> $GITHUB_PATH
 
       - name: Run full pipeline
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OFFENSE_YEARS: ${{ vars.OFFENSE_YEARS || '' }}
-          PATH: .venv/bin:$PATH
         run: npm run pipeline
 
       - name: Verify freshness
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          node -e "
+          node --input-type=module -e "
             import pg from 'pg';
             import { getPgConfig } from './scripts/lib/db-config.mjs';
             const c = new pg.Client(getPgConfig());
             await c.connect();
             const { rows } = await c.query(
-              \"SELECT max(_loaded_at)::text AS loaded, max(report_month_year) AS latest FROM raw.offenses\"
+              'SELECT max(_loaded_at)::text AS loaded, max(report_month_year) AS latest FROM raw.offenses'
             );
             console.log('Latest load:', rows[0]?.loaded);
             console.log('Latest month:', rows[0]?.latest);
