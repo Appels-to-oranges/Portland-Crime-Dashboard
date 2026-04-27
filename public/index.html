@@ -281,15 +281,16 @@
         mapLegend = L.control({ position: "bottomright" });
         mapLegend.onAdd = function () {
           const div = L.DomUtil.create("div", "map-legend");
+          const fmt = (v) => v < 10 ? v.toFixed(1) : Math.round(v);
           div.innerHTML = "<strong>Per 1k pop</strong>";
           div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_ZERO}"></span>0</div>`;
           let prev = 0;
           for (let i = 0; i < breaks.length; i++) {
-            const label = `${Math.round(prev)}\u2013${Math.round(breaks[i])}`;
+            const label = `${fmt(prev)}\u2013${fmt(breaks[i])}`;
             div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_COLORS[i]}"></span>${label}</div>`;
             prev = breaks[i];
           }
-          div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_COLORS[MAP_COLORS.length - 1]}"></span>${Math.round(prev)}+</div>`;
+          div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_COLORS[MAP_COLORS.length - 1]}"></span>${fmt(prev)}+</div>`;
           return div;
         };
         mapLegend.addTo(leafletMap);
