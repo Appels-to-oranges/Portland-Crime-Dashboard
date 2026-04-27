@@ -435,6 +435,14 @@ app.get("/api/by-hour", async (req, res) => {
   const where = [];
   const params = [];
   let idx = 1;
+  if (req.query.start) {
+    where.push(`month_start >= $${idx++}::date`);
+    params.push(req.query.start + "-01");
+  }
+  if (req.query.end) {
+    where.push(`month_start <= ($${idx++}::date + interval '1 month - 1 day')`);
+    params.push(req.query.end + "-01");
+  }
   if (req.query.neighborhood) {
     where.push(`neighborhood = $${idx++}`);
     params.push(req.query.neighborhood);

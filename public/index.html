@@ -217,7 +217,8 @@
         document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
         document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${tab}`));
         document.querySelectorAll(".date-filter").forEach((el) => el.style.display = tab === "historical" ? "" : "none");
-        if (tab === "historical" && !charts.trend) refreshAll();
+        pushFilterState();
+        refreshAll();
         if (tab === "current" && leafletMap) setTimeout(() => leafletMap.invalidateSize(), 50);
       }
       document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -225,16 +226,10 @@
       });
 
       // ---------- QUERY STRING ----------
-      function qs() {
+      function buildQs(opts) {
         const p = new URLSearchParams();
-        if (activeTab === "current" && latestMonth) {
-          p.set("start", latestMonth);
-          p.set("end", latestMonth);
-        } else {
-          const start = $("f-start").value, end = $("f-end").value;
-          if (start) p.set("start", start);
-          if (end) p.set("end", end);
-        }
+        if (opts.start) p.set("start", opts.start);
+        if (opts.end) p.set("end", opts.end);
         const n = $("f-neighborhood").value, c = $("f-category").value;
         if (n) p.set("neighborhood", n);
         if (c) p.set("category", c);
@@ -242,16 +237,12 @@
         return s ? "?" + s : "";
       }
 
+      function qsCurrentMonth() {
+        return buildQs({ start: latestMonth, end: latestMonth });
+      }
+
       function qsHistorical() {
-        const p = new URLSearchParams();
-        const start = $("f-start").value, end = $("f-end").value;
-        if (start) p.set("start", start);
-        if (end) p.set("end", end);
-        const n = $("f-neighborhood").value, c = $("f-category").value;
-        if (n) p.set("neighborhood", n);
-        if (c) p.set("category", c);
-        const s = p.toString();
-        return s ? "?" + s : "";
+        return buildQs({ start: $("f-start").value, end: $("f-end").value });
       }
 
       async function fetchJson(url) { const r = await fetch(url); if (!r.ok) throw new Error(r.statusText); return r.json(); }
@@ -532,15 +523,20 @@
         statusEl.textContent = "Updating...";
         statusEl.classList.remove("error");
         try {
-          const qCurrent = qs();
           const qHist = qsHistorical();
 
-          const [trendAll, cat, neigh, geo, hourly] = await Promise.all([
-            fetchJson("/api/trend" + qHist),
-            fetchJson("/api/by-category" + qCurrent),
-            fetchJson("/api/by-neighborhood" + qCurrent),
-            fetchJson("/api/geo" + qCurrent),
-            fetchJson("/api/by-hour" + qCurrent),
+          const trendAll = await fetchJson("/api/trend" + qHist);
+          if (trendAll.length) {
+            latestMonth = trendAll[trendAll.length - 1].month;
+          }
+
+          const qCur = qsCurrentMonth();
+
+          const [cat, neigh, geo, hourly] = await Promise.all([
+            fetchJson("/api/by-category" + qCur),
+            fetchJson("/api/by-neighborhood" + qCur),
+            fetchJson("/api/geo" + qCur),
+            fetchJson("/api/by-hour" + qCur),
           ]);
 
           updateKPIs(trendAll, cat, neigh);
