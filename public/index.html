@@ -52,10 +52,6 @@
       .kpi .value.up { color: #ef4444; }
       .kpi .value.down { color: #22c55e; }
       .kpi .value.flat { color: var(--muted); }
-      .kpi .corr-row { display: flex; gap: 1.2rem; margin-top: 0.35rem; }
-      .kpi .corr-item { display: flex; flex-direction: column; }
-      .kpi .corr-label { font-size: 0.65rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; }
-      .kpi .corr-val { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
       .chart-card { background: var(--surface); border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); min-height: 22rem; display: flex; flex-direction: column; }
       .chart-card.wide { grid-column: span 2; }
       .chart-card.full { grid-column: span 4; }
@@ -105,14 +101,14 @@
         <div class="detail" id="kpi-latest-detail">offenses</div>
       </div>
       <div class="kpi">
-        <div class="label">vs. Prior Month</div>
-        <div class="value" id="kpi-mom-val">&mdash;</div>
-        <div class="detail" id="kpi-mom-detail"></div>
+        <div class="label">vs. Seasonal Average</div>
+        <div class="value" id="kpi-seasonal-val">&mdash;</div>
+        <div class="detail" id="kpi-seasonal-detail"></div>
       </div>
       <div class="kpi">
-        <div class="label">vs. Same Month Last Year</div>
-        <div class="value" id="kpi-yoy-val">&mdash;</div>
-        <div class="detail" id="kpi-yoy-detail"></div>
+        <div class="label">Top Neighborhood</div>
+        <div class="value" id="kpi-top-neigh-val">&mdash;</div>
+        <div class="detail" id="kpi-top-neigh-detail"></div>
       </div>
       <div class="kpi">
         <div class="label">Top Category</div>
@@ -442,28 +438,34 @@
         return pct > 0 ? "up" : pct < 0 ? "down" : "flat";
       }
 
-      function updateKPIs(trend, cat) {
+      function updateKPIs(trend, cat, neigh) {
         if (!trend.length) return;
         const latest = trend[trend.length - 1];
-        const prior = trend.length >= 2 ? trend[trend.length - 2] : null;
 
-        const latestMonth = latest.month;
-        const yoyMonth = latestMonth.replace(/^\d{4}/, (y) => String(Number(y) - 1));
-        const yoyEntry = trend.find((d) => d.month === yoyMonth);
-
-        $("kpi-latest-label").textContent = latest.month_label || latestMonth;
+        $("kpi-latest-label").textContent = latest.month_label || latest.month;
         $("kpi-latest-val").textContent = latest.total.toLocaleString();
         $("kpi-latest-detail").textContent = "offenses";
 
-        const momPct = pctChange(latest.total, prior?.total);
-        $("kpi-mom-val").textContent = formatPct(momPct);
-        $("kpi-mom-val").className = "value " + pctClass(momPct);
-        $("kpi-mom-detail").textContent = prior ? `${prior.total.toLocaleString()} \u2192 ${latest.total.toLocaleString()}` : "";
+        const latestMo = parseInt(latest.month.split("-")[1], 10);
+        const sameMonthEntries = trend.filter((d) => {
+          const mo = parseInt(d.month.split("-")[1], 10);
+          return mo === latestMo && d.month !== latest.month;
+        });
+        if (sameMonthEntries.length) {
+          const avg = sameMonthEntries.reduce((s, d) => s + d.total, 0) / sameMonthEntries.length;
+          const pct = pctChange(latest.total, avg);
+          $("kpi-seasonal-val").textContent = formatPct(pct);
+          $("kpi-seasonal-val").className = "value " + pctClass(pct);
+          $("kpi-seasonal-detail").textContent = `avg ${Math.round(avg).toLocaleString()} for ${MONTHS[latestMo - 1]} (${sameMonthEntries.length}yr)`;
+        } else {
+          $("kpi-seasonal-val").textContent = "\u2014";
+          $("kpi-seasonal-detail").textContent = "not enough history";
+        }
 
-        const yoyPct = pctChange(latest.total, yoyEntry?.total);
-        $("kpi-yoy-val").textContent = formatPct(yoyPct);
-        $("kpi-yoy-val").className = "value " + pctClass(yoyPct);
-        $("kpi-yoy-detail").textContent = yoyEntry ? `${yoyEntry.total.toLocaleString()} \u2192 ${latest.total.toLocaleString()}` : "no data last year";
+        if (neigh.length) {
+          $("kpi-top-neigh-val").textContent = neigh[0].neighborhood;
+          $("kpi-top-neigh-detail").textContent = `${neigh[0].total.toLocaleString()} offenses`;
+        }
 
         if (cat.length) {
           $("kpi-top-cat-val").textContent = cat[0].category;
@@ -551,7 +553,7 @@
             fetchJson("/api/precip-by-category" + q), fetchJson("/api/heatmap" + q),
             fetchJson("/api/by-hour" + q), fetchJson("/api/precip-analysis" + q),
           ]);
-          updateKPIs(trend, cat);
+          updateKPIs(trend, cat, neigh);
           renderCategory(cat);
           renderNeighborhood(neigh);
           renderHourChart(hourly);
