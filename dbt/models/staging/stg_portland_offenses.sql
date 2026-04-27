@@ -27,6 +27,7 @@ select
     when nullif(trim(report_date), '') ~ '^\d{1,2}/\d{1,2}/\d{4}$'
       then to_date(trim(report_date), 'MM/DD/YYYY')
   end as report_date,
+  nullif(trim(occur_time), '') as occur_time,
   nullif(trim(report_month_year), '') as report_month_year,
   _loaded_at
 

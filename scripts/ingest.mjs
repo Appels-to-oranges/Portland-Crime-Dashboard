@@ -10,8 +10,9 @@ import { getPgConfig } from "./lib/db-config.mjs";
 const BASE_URL =
   "https://public.tableau.com/views/PPBOpenDataDownloads/New_Offense_Data_";
 
-function currentYearDefault() {
-  return String(new Date().getFullYear());
+function defaultYears() {
+  const cur = new Date().getFullYear();
+  return Array.from({ length: cur - 2021 }, (_, i) => String(2022 + i)).join(",");
 }
 
 function buildUrl(year) {
@@ -41,7 +42,7 @@ const COPY_SQL = `
 
 async function main() {
   const fullRefresh = process.env.FULL_REFRESH === "1";
-  const years = (process.env.OFFENSE_YEARS || currentYearDefault())
+  const years = (process.env.OFFENSE_YEARS || defaultYears())
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);

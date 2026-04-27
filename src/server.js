@@ -430,6 +430,53 @@ app.get("/api/precip-by-category", async (req, res) => {
   }
 });
 
+// Crime by hour of day
+app.get("/api/by-hour", async (req, res) => {
+  const where = [];
+  const params = [];
+  let idx = 1;
+  if (req.query.neighborhood) {
+    where.push(`neighborhood = $${idx++}`);
+    params.push(req.query.neighborhood);
+  }
+  if (req.query.category) {
+    where.push(`offense_category = $${idx++}`);
+    params.push(req.query.category);
+  }
+  const clause = where.length ? "WHERE " + where.join(" AND ") : "";
+  try {
+    const { rows } = await pool.query(
+      `SELECT occur_hour AS hour,
+              sum(offense_count)::int AS total
+       FROM intermediate.int_offense_by_hour
+       ${clause}
+       GROUP BY occur_hour
+       ORDER BY occur_hour`,
+      params,
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
+// Data freshness metadata
+app.get("/api/meta", async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT max(_loaded_at)::text AS last_refreshed,
+             max(to_date(report_month_year, 'Month YYYY'))::text AS data_through,
+             count(*)::int AS total_rows
+      FROM raw.offenses
+    `);
+    res.json(rows[0] ?? {});
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
 // Legacy summary (kept for backward compat)
 app.get("/api/summary", async (_req, res) => {
   try {

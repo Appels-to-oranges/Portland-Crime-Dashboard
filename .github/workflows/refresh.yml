@@ -1,0 +1,54 @@
+name: Daily Data Refresh
+
+on:
+  schedule:
+    - cron: "30 10 * * *" # 3:30 AM PT / 10:30 UTC daily
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install dbt
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r dbt/requirements.txt
+
+      - name: Run full pipeline
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OFFENSE_YEARS: ${{ vars.OFFENSE_YEARS || '' }}
+          PATH: .venv/bin:$PATH
+        run: npm run pipeline
+
+      - name: Verify freshness
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          node -e "
+            import pg from 'pg';
+            import { getPgConfig } from './scripts/lib/db-config.mjs';
+            const c = new pg.Client(getPgConfig());
+            await c.connect();
+            const { rows } = await c.query(
+              \"SELECT max(_loaded_at)::text AS loaded, max(report_month_year) AS latest FROM raw.offenses\"
+            );
+            console.log('Latest load:', rows[0]?.loaded);
+            console.log('Latest month:', rows[0]?.latest);
+            await c.end();
+          "

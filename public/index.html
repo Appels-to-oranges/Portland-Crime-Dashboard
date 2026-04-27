@@ -86,7 +86,7 @@
   <body>
     <header>
       <h1>Portland Crime Dashboard</h1>
-      <p class="sub">Portland Police Bureau offense data with weather and demographic context</p>
+      <p class="sub">Portland Police Bureau offense data with weather and demographic context <span id="freshness" style="margin-left:0.5rem;font-size:0.78rem;opacity:0.7"></span></p>
     </header>
     <div class="filters" id="filter-bar">
       <div class="filter-group"><label for="f-start">From</label><input type="month" id="f-start" /></div>
@@ -124,6 +124,10 @@
       <div class="chart-card wide"><h2>Offenses by Category</h2><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
       <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
 
+      <!-- Time of day -->
+      <div class="chart-card wide"><h2>Crime by Hour of Day</h2><div class="chart-wrap"><canvas id="chart-hour"></canvas></div></div>
+      <div class="chart-card wide"><h2>Seasonality Heatmap (Month × Category)</h2><div class="chart-wrap"><canvas id="chart-heatmap"></canvas></div></div>
+
       <!-- Map -->
       <div class="chart-card full" style="min-height:32rem">
         <h2>Crime by ZCTA &mdash; Choropleth (offenses per 1,000 pop)</h2>
@@ -147,8 +151,18 @@
         <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
       </div>
 
+      <div class="chart-card wide"><h2>Precipitation Buckets (avg offenses)</h2><div class="chart-wrap"><canvas id="chart-precip-buckets"></canvas></div></div>
+      <div class="chart-card wide"><h2 id="precip-scatter-title">Precipitation vs. Crime</h2><div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div></div>
+
       <div class="chart-card full"><h2>Demographics &amp; Crime by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
     </div>
+
+    <footer style="max-width:90rem;margin:0 auto;padding:0.75rem 2rem 2rem;text-align:center;font-size:0.78rem;color:var(--muted);border-top:1px solid var(--border);">
+      Data: <a href="https://www.portland.gov/police/open-data" style="color:var(--accent)">Portland Police Bureau</a> &middot;
+      <a href="https://www.census.gov/programs-surveys/acs" style="color:var(--accent)">U.S. Census ACS</a> &middot;
+      <a href="https://open-meteo.com/" style="color:var(--accent)">Open-Meteo</a> &middot;
+      <a href="https://github.com/paysoncarpenter/PDX_BLOCK_BRIEF" style="color:var(--accent)">GitHub</a>
+    </footer>
 
     <script>
     (function () {
@@ -290,12 +304,29 @@
         setTimeout(() => leafletMap.invalidateSize(), 100);
       }
 
-      // ---------- TREND ----------
+      // ---------- TREND (with YoY overlay) ----------
       function renderTrend(data) {
         const c = themeColors();
         const labels = data.map((d) => d.month), values = data.map((d) => d.total);
-        if (charts.trend) { charts.trend.data.labels = labels; charts.trend.data.datasets[0].data = values; charts.trend.update(); return; }
-        charts.trend = new Chart($("chart-trend"), { type: "line", data: { labels, datasets: [{ label: "Offenses", data: values, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 5 }] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false } }, interaction: { intersect: false, mode: "index" } } });
+
+        const byMonth = {};
+        data.forEach((d) => { byMonth[d.month] = d.total; });
+        const yoyValues = data.map((d) => {
+          const prev = d.month.replace(/^\d{4}/, (y) => String(Number(y) - 1));
+          return byMonth[prev] ?? null;
+        });
+
+        if (charts.trend) {
+          charts.trend.data.labels = labels;
+          charts.trend.data.datasets[0].data = values;
+          charts.trend.data.datasets[1].data = yoyValues;
+          charts.trend.update();
+          return;
+        }
+        charts.trend = new Chart($("chart-trend"), { type: "line", data: { labels, datasets: [
+          { label: "Offenses", data: values, borderColor: c.accent, backgroundColor: c.accent + "22", fill: true, tension: 0.3, pointRadius: 2, pointHoverRadius: 5 },
+          { label: "Prior Year", data: yoyValues, borderColor: c.muted, borderDash: [5, 4], tension: 0.3, pointRadius: 0, pointHoverRadius: 4, fill: false },
+        ] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: true } }, interaction: { intersect: false, mode: "index" } } });
       }
 
       // ---------- CATEGORY ----------
@@ -440,27 +471,99 @@
         }
       }
 
+      // ---------- HOUR OF DAY ----------
+      function renderHourChart(data) {
+        const c = themeColors();
+        const labels = Array.from({ length: 24 }, (_, i) => {
+          const h = i % 12 || 12;
+          return `${h}${i < 12 ? "a" : "p"}`;
+        });
+        const values = new Array(24).fill(0);
+        data.forEach((d) => { if (d.hour >= 0 && d.hour < 24) values[d.hour] = d.total; });
+        const colors = values.map((_, i) => {
+          if (i >= 6 && i < 12) return c.accent3 + "cc";
+          if (i >= 12 && i < 18) return c.accent + "cc";
+          if (i >= 18 && i < 22) return c.accent4 + "cc";
+          return c.accent2 + "66";
+        });
+        if (charts.hour) { charts.hour.data.datasets[0].data = values; charts.hour.data.datasets[0].backgroundColor = colors; charts.hour.update(); return; }
+        charts.hour = new Chart($("chart-hour"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 3 }] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+      }
+
+      // ---------- HEATMAP (month x category) ----------
+      function renderHeatmap(data) {
+        const c = themeColors();
+        const categories = [...new Set(data.map((d) => d.category))].sort();
+        const grid = {};
+        let maxVal = 0;
+        data.forEach((d) => {
+          const key = `${d.month_num}-${d.category}`;
+          grid[key] = d.avg_total;
+          if (d.avg_total > maxVal) maxVal = d.avg_total;
+        });
+        const pts = [];
+        categories.forEach((cat, ci) => {
+          for (let m = 1; m <= 12; m++) {
+            const v = grid[`${m}-${cat}`] || 0;
+            pts.push({ x: m - 1, y: ci, v });
+          }
+        });
+        if (charts.heatmap) { charts.heatmap.data.datasets[0].data = pts; charts.heatmap.update(); return; }
+        charts.heatmap = new Chart($("chart-heatmap"), {
+          type: "scatter",
+          data: { datasets: [{ label: "Avg Offenses", data: pts, pointRadius(ctx) { const v = ctx.raw?.v ?? 0; return Math.max(4, Math.sqrt(v / Math.max(maxVal, 1)) * 18); }, pointStyle: "rect", backgroundColor(ctx) { const v = ctx.raw?.v ?? 0; const pct = v / Math.max(maxVal, 1); if (pct < 0.25) return c.accent2 + "44"; if (pct < 0.5) return c.accent2 + "88"; if (pct < 0.75) return c.accent3 + "bb"; return "#ef4444cc"; } }] },
+          options: {
+            scales: { x: { type: "linear", min: -0.5, max: 11.5, ticks: { stepSize: 1, callback: (v) => MONTHS[v] || "" }, grid: { display: false } }, y: { type: "linear", min: -0.5, max: categories.length - 0.5, ticks: { stepSize: 1, callback: (v) => categories[v] || "" }, grid: { display: false }, reverse: true } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return `${categories[d.y]}: ${d.v} avg offenses in ${MONTHS[d.x]}`; } } } },
+            maintainAspectRatio: false,
+          },
+        });
+      }
+
+      // ---------- PRECIP ANALYSIS ----------
+      function renderPrecipBuckets(buckets) {
+        const c = themeColors();
+        const labels = buckets.map((b) => b.bucket);
+        const values = buckets.map((b) => b.avg_offenses);
+        const colors = [c.accent2, c.accent, c.accent3, "#ef4444"];
+        if (charts.precipBuckets) { charts.precipBuckets.data.labels = labels; charts.precipBuckets.data.datasets[0].data = values; charts.precipBuckets.update(); return; }
+        charts.precipBuckets = new Chart($("chart-precip-buckets"), { type: "bar", data: { labels, datasets: [{ label: "Avg Offenses", data: values, backgroundColor: colors.slice(0, labels.length), borderRadius: 4 }] }, options: { scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { return `${buckets[ctx.dataIndex].month_count} months in bucket`; } } } } } });
+      }
+
+      function renderPrecipScatter(points, rPrecip) {
+        const c = themeColors();
+        const pts = points.map((d) => ({ x: parseFloat(d.precip_mm), y: d.total, month: d.month }));
+        $("precip-scatter-title").textContent = `Precipitation vs. Crime (r = ${rPrecip != null ? rPrecip : "N/A"})`;
+        if (charts.precipScatter) { charts.precipScatter.data.datasets[0].data = pts; charts.precipScatter.update(); return; }
+        charts.precipScatter = new Chart($("chart-precip-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent2 + "aa", borderColor: c.accent2, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Precipitation (mm)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Precip: ${d.x}mm`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
+      }
+
       // ---------- REFRESH ----------
       async function refreshAll() {
         statusEl.textContent = "Updating...";
         statusEl.classList.remove("error");
         try {
           const q = qs();
-          const [trend, cat, neigh, weather, demo, seasonal, corr, geo, precipCat] = await Promise.all([
+          const [trend, cat, neigh, weather, demo, seasonal, corr, geo, precipCat, heatmap, hourly, precipAnalysis] = await Promise.all([
             fetchJson("/api/trend" + q), fetchJson("/api/by-category" + q), fetchJson("/api/by-neighborhood" + q),
             fetchJson("/api/weather-crime" + q), fetchJson("/api/demographics" + q),
             fetchJson("/api/seasonality" + q), fetchJson("/api/correlation" + q), fetchJson("/api/geo" + q),
-            fetchJson("/api/precip-by-category" + q),
+            fetchJson("/api/precip-by-category" + q), fetchJson("/api/heatmap" + q),
+            fetchJson("/api/by-hour" + q), fetchJson("/api/precip-analysis" + q),
           ]);
           updateKPIs(trend, cat);
           renderCategory(cat);
           renderNeighborhood(neigh);
+          renderHourChart(hourly);
+          renderHeatmap(heatmap);
           renderMap(geo);
           renderTrend(trend);
           renderWeather(weather);
           renderSeasonality(seasonal);
           renderCorrScatter(corr);
           renderPrecipCategory(precipCat);
+          renderPrecipBuckets(precipAnalysis.buckets || []);
+          renderPrecipScatter(precipAnalysis.points || [], precipAnalysis.r_precip);
           renderDemographics(demo);
           statusEl.textContent = "";
         } catch (e) {
@@ -470,17 +573,59 @@
         }
       }
 
+      // ---------- URL STATE ----------
+      function pushFilterState() {
+        const p = new URLSearchParams();
+        const s = $("f-start").value, e = $("f-end").value;
+        const n = $("f-neighborhood").value, c = $("f-category").value;
+        if (s && s !== defaultStart) p.set("start", s);
+        if (e && e !== defaultEnd) p.set("end", e);
+        if (n) p.set("neighborhood", n);
+        if (c) p.set("category", c);
+        const qs = p.toString();
+        history.replaceState(null, "", qs ? "?" + qs : location.pathname);
+      }
+
+      function readUrlState() {
+        const p = new URLSearchParams(location.search);
+        if (p.has("start")) $("f-start").value = p.get("start");
+        if (p.has("end")) $("f-end").value = p.get("end");
+        if (p.has("neighborhood")) $("f-neighborhood").value = p.get("neighborhood");
+        if (p.has("category")) $("f-category").value = p.get("category");
+      }
+
+      function onFilterChange() { pushFilterState(); refreshAll(); }
+
+      // ---------- FRESHNESS ----------
+      async function loadFreshness() {
+        try {
+          const meta = await fetchJson("/api/meta");
+          const parts = [];
+          if (meta.data_through) {
+            const d = new Date(meta.data_through + "T00:00:00");
+            parts.push("Data through " + d.toLocaleDateString("en-US", { month: "short", year: "numeric" }));
+          }
+          if (meta.last_refreshed) {
+            const d = new Date(meta.last_refreshed);
+            parts.push("refreshed " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+          }
+          if (parts.length) $("freshness").textContent = "· " + parts.join(" · ");
+        } catch (_) {}
+      }
+
       // ---------- INIT ----------
       async function init() {
         try { await loadFilters(); } catch (e) { console.error("Could not load filters", e); }
-        await refreshAll();
-        $("f-start").addEventListener("change", refreshAll);
-        $("f-end").addEventListener("change", refreshAll);
-        $("f-neighborhood").addEventListener("change", refreshAll);
-        $("f-category").addEventListener("change", refreshAll);
+        readUrlState();
+        await Promise.all([refreshAll(), loadFreshness()]);
+        $("f-start").addEventListener("change", onFilterChange);
+        $("f-end").addEventListener("change", onFilterChange);
+        $("f-neighborhood").addEventListener("change", onFilterChange);
+        $("f-category").addEventListener("change", onFilterChange);
         $("btn-reset").addEventListener("click", () => {
           $("f-start").value = defaultStart; $("f-end").value = defaultEnd;
           $("f-neighborhood").value = ""; $("f-category").value = "";
+          pushFilterState();
           refreshAll();
         });
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { chartDefaults(); Object.values(charts).forEach((ch) => ch.update()); });
