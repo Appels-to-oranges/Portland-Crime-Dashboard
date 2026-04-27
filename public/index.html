@@ -37,6 +37,11 @@
       header { padding: 1.5rem 2rem 1rem; max-width: 90rem; margin: 0 auto; }
       header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
       header .sub { color: var(--muted); font-size: 0.9rem; margin-top: 0.15rem; }
+      .tab-bar { display: flex; gap: 0; max-width: 90rem; margin: 0 auto; padding: 0 2rem; }
+      .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-size: 0.9rem; font-weight: 600; font-family: inherit; padding: 0.6rem 1.25rem; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+      .tab-btn:hover { color: var(--text); }
+      .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+      .tab-divider { max-width: 90rem; margin: 0 auto; padding: 0 2rem; border-bottom: 1px solid var(--border); }
       .filters { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 2rem; max-width: 90rem; margin: 0 auto; align-items: flex-end; }
       .filter-group { display: flex; flex-direction: column; gap: 0.2rem; }
       .filter-group label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
@@ -61,7 +66,9 @@
       .map-legend { position: absolute; bottom: 24px; right: 10px; background: var(--surface); padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; z-index: 1000; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
       .map-legend .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
       .map-legend .lg-swatch { width: 18px; height: 12px; border-radius: 2px; display: inline-block; }
-      .section-label { grid-column: span 4; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; margin-top: 0.5rem; padding-bottom: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+      .section-label { grid-column: span 4; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; margin-top: 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
       .status-bar { text-align: center; padding: 0.5rem; font-size: 0.8rem; color: var(--muted); }
       .status-bar.error { color: var(--error); }
       @media (max-width: 1100px) {
@@ -84,69 +91,73 @@
       <h1>Portland Crime Dashboard</h1>
       <p class="sub">Portland Police Bureau offense data with weather and demographic context <span id="freshness" style="margin-left:0.5rem;font-size:0.78rem;opacity:0.7"></span></p>
     </header>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="current">Current Month</button>
+      <button class="tab-btn" data-tab="historical">Historical</button>
+    </div>
+    <div class="tab-divider"></div>
+
     <div class="filters" id="filter-bar">
-      <div class="filter-group"><label for="f-start">From</label><input type="month" id="f-start" /></div>
-      <div class="filter-group"><label for="f-end">To</label><input type="month" id="f-end" /></div>
+      <div class="filter-group date-filter" style="display:none"><label for="f-start">From</label><input type="month" id="f-start" /></div>
+      <div class="filter-group date-filter" style="display:none"><label for="f-end">To</label><input type="month" id="f-end" /></div>
       <div class="filter-group"><label for="f-neighborhood">Neighborhood</label><select id="f-neighborhood"><option value="">All</option></select></div>
       <div class="filter-group"><label for="f-category">Offense Category</label><select id="f-category"><option value="">All</option></select></div>
       <button class="btn-reset" id="btn-reset">Reset</button>
     </div>
     <p class="status-bar" id="status">Loading dashboard...</p>
 
-    <div class="dashboard" id="dashboard">
-      <!-- KPI row -->
-      <div class="kpi">
-        <div class="label" id="kpi-latest-label">Latest Month</div>
-        <div class="value" id="kpi-latest-val">&mdash;</div>
-        <div class="detail" id="kpi-latest-detail">offenses</div>
+    <!-- CURRENT MONTH TAB -->
+    <div class="tab-panel active" id="panel-current">
+      <div class="dashboard">
+        <div class="kpi">
+          <div class="label" id="kpi-latest-label">Latest Month</div>
+          <div class="value" id="kpi-latest-val">&mdash;</div>
+          <div class="detail" id="kpi-latest-detail">offenses</div>
+        </div>
+        <div class="kpi">
+          <div class="label">vs. Seasonal Average</div>
+          <div class="value" id="kpi-seasonal-val">&mdash;</div>
+          <div class="detail" id="kpi-seasonal-detail"></div>
+        </div>
+        <div class="kpi">
+          <div class="label">Top Neighborhood</div>
+          <div class="value" id="kpi-top-neigh-val">&mdash;</div>
+          <div class="detail" id="kpi-top-neigh-detail"></div>
+        </div>
+        <div class="kpi">
+          <div class="label">Top Category</div>
+          <div class="value" id="kpi-top-cat-val">&mdash;</div>
+          <div class="detail" id="kpi-top-cat-detail"></div>
+        </div>
+
+        <div class="chart-card wide"><h2>Offenses by Category</h2><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
+        <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
+        <div class="chart-card wide"><h2>Crime by Hour of Day</h2><div class="chart-wrap"><canvas id="chart-hour"></canvas></div></div>
+
+        <div class="chart-card full" style="min-height:32rem">
+          <h2>Crime by ZCTA &mdash; Choropleth (offenses per 1,000 pop)</h2>
+          <div class="chart-wrap"><div id="map"></div></div>
+        </div>
       </div>
-      <div class="kpi">
-        <div class="label">vs. Seasonal Average</div>
-        <div class="value" id="kpi-seasonal-val">&mdash;</div>
-        <div class="detail" id="kpi-seasonal-detail"></div>
+    </div>
+
+    <!-- HISTORICAL TAB -->
+    <div class="tab-panel" id="panel-historical">
+      <div class="dashboard">
+        <div class="chart-card wide"><h2>Monthly Crime Trend</h2><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
+        <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
+
+        <div class="chart-card wide"><h2 id="scatter-title">Temperature vs. Crime</h2><div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div></div>
+        <div class="chart-card wide"><h2 id="precip-scatter-title">Precipitation vs. Crime</h2><div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div></div>
+
+        <div class="chart-card full">
+          <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
+          <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
+        </div>
+
+        <div class="chart-card full"><h2>Demographics &amp; Crime by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
       </div>
-      <div class="kpi">
-        <div class="label">Top Neighborhood</div>
-        <div class="value" id="kpi-top-neigh-val">&mdash;</div>
-        <div class="detail" id="kpi-top-neigh-detail"></div>
-      </div>
-      <div class="kpi">
-        <div class="label">Top Category</div>
-        <div class="value" id="kpi-top-cat-val">&mdash;</div>
-        <div class="detail" id="kpi-top-cat-detail"></div>
-      </div>
-
-      <!-- Recent month: category + neighborhood -->
-      <div class="chart-card wide"><h2>Offenses by Category</h2><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
-      <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
-
-      <!-- Time of day -->
-      <div class="chart-card wide"><h2>Crime by Hour of Day</h2><div class="chart-wrap"><canvas id="chart-hour"></canvas></div></div>
-      <!-- Map -->
-      <div class="chart-card full" style="min-height:32rem">
-        <h2>Crime by ZCTA &mdash; Choropleth (offenses per 1,000 pop)</h2>
-        <div class="chart-wrap"><div id="map"></div></div>
-      </div>
-
-      <!-- Section: Historical trends -->
-      <div class="section-label">Historical Trends</div>
-
-      <div class="chart-card wide"><h2>Monthly Crime Trend</h2><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
-
-      <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
-      <div class="chart-card wide"><h2 id="scatter-title">Temperature vs. Crime</h2><div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div></div>
-
-      <!-- Section: Deep-dive -->
-      <div class="section-label">Deep Dive</div>
-
-      <div class="chart-card full">
-        <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
-        <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
-      </div>
-
-      <div class="chart-card wide"><h2 id="precip-scatter-title">Precipitation vs. Crime</h2><div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div></div>
-
-      <div class="chart-card full"><h2>Demographics &amp; Crime by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
     </div>
 
     <footer style="max-width:90rem;margin:0 auto;padding:0.75rem 2rem 2rem;text-align:center;font-size:0.78rem;color:var(--muted);border-top:1px solid var(--border);">
@@ -162,6 +173,10 @@
       const isDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
       const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
       const cToF = (c) => c * 9 / 5 + 32;
+
+      let activeTab = "current";
+      let latestMonth = "";
+      let defaultStart = "", defaultEnd = "";
 
       function themeColors() {
         const s = getComputedStyle(document.documentElement);
@@ -195,19 +210,50 @@
       let leafletMap = null;
       let geoLayer = null;
       let mapLegend = null;
-      let defaultStart = "", defaultEnd = "";
 
+      // ---------- TABS ----------
+      function switchTab(tab) {
+        activeTab = tab;
+        document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+        document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${tab}`));
+        document.querySelectorAll(".date-filter").forEach((el) => el.style.display = tab === "historical" ? "" : "none");
+        if (tab === "historical" && !charts.trend) refreshAll();
+        if (tab === "current" && leafletMap) setTimeout(() => leafletMap.invalidateSize(), 50);
+      }
+      document.querySelectorAll(".tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      });
+
+      // ---------- QUERY STRING ----------
       function qs() {
         const p = new URLSearchParams();
-        const start = $("f-start").value, end = $("f-end").value;
+        if (activeTab === "current" && latestMonth) {
+          p.set("start", latestMonth);
+          p.set("end", latestMonth);
+        } else {
+          const start = $("f-start").value, end = $("f-end").value;
+          if (start) p.set("start", start);
+          if (end) p.set("end", end);
+        }
         const n = $("f-neighborhood").value, c = $("f-category").value;
-        if (start) p.set("start", start);
-        if (end) p.set("end", end);
         if (n) p.set("neighborhood", n);
         if (c) p.set("category", c);
         const s = p.toString();
         return s ? "?" + s : "";
       }
+
+      function qsHistorical() {
+        const p = new URLSearchParams();
+        const start = $("f-start").value, end = $("f-end").value;
+        if (start) p.set("start", start);
+        if (end) p.set("end", end);
+        const n = $("f-neighborhood").value, c = $("f-category").value;
+        if (n) p.set("neighborhood", n);
+        if (c) p.set("category", c);
+        const s = p.toString();
+        return s ? "?" + s : "";
+      }
+
       async function fetchJson(url) { const r = await fetch(url); if (!r.ok) throw new Error(r.statusText); return r.json(); }
 
       const PALETTE = [];
@@ -225,10 +271,10 @@
         data.neighborhoods.forEach((n) => { const o = document.createElement("option"); o.value = n; o.textContent = n; nSel.appendChild(o); });
         data.categories.forEach((c) => { const o = document.createElement("option"); o.value = c; o.textContent = c; cSel.appendChild(o); });
         if (data.min_month) { $("f-start").min = data.min_month; $("f-start").value = data.min_month; defaultStart = data.min_month; }
-        if (data.max_month) { $("f-end").max = data.max_month; $("f-end").value = data.max_month; defaultEnd = data.max_month; }
+        if (data.max_month) { $("f-end").max = data.max_month; $("f-end").value = data.max_month; defaultEnd = data.max_month; latestMonth = data.max_month; }
       }
 
-      // ---------- LEAFLET MAP (dynamic quantile breaks) ----------
+      // ---------- LEAFLET MAP ----------
       const MAP_COLORS = ["#edf8fb","#b2e2e2","#66c2a4","#2ca25f","#006d2c"];
       const MAP_ZERO = "#f0f0f0";
 
@@ -301,14 +347,12 @@
       function renderTrend(data) {
         const c = themeColors();
         const labels = data.map((d) => d.month), values = data.map((d) => d.total);
-
         const byMonth = {};
         data.forEach((d) => { byMonth[d.month] = d.total; });
         const yoyValues = data.map((d) => {
           const prev = d.month.replace(/^\d{4}/, (y) => String(Number(y) - 1));
           return byMonth[prev] ?? null;
         });
-
         if (charts.trend) {
           charts.trend.data.labels = labels;
           charts.trend.data.datasets[0].data = values;
@@ -405,6 +449,34 @@
         charts.corrScatter = new Chart($("chart-corr-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent3 + "aa", borderColor: c.accent3, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Avg High Temp (\u00B0F)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Temp: ${d.x}\u00B0F`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
       }
 
+      // ---------- PRECIP SCATTER ----------
+      function renderPrecipScatter(points, rPrecip) {
+        const c = themeColors();
+        const pts = points.map((d) => ({ x: parseFloat(d.precip_mm), y: d.total, month: d.month }));
+        $("precip-scatter-title").textContent = `Precipitation vs. Crime (r = ${rPrecip != null ? rPrecip : "N/A"})`;
+        if (charts.precipScatter) { charts.precipScatter.data.datasets[0].data = pts; charts.precipScatter.update(); return; }
+        charts.precipScatter = new Chart($("chart-precip-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent2 + "aa", borderColor: c.accent2, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Precipitation (mm)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Precip: ${d.x}mm`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
+      }
+
+      // ---------- HOUR OF DAY ----------
+      function renderHourChart(data) {
+        const c = themeColors();
+        const labels = Array.from({ length: 24 }, (_, i) => {
+          const h = i % 12 || 12;
+          return `${h}${i < 12 ? "a" : "p"}`;
+        });
+        const values = new Array(24).fill(0);
+        data.forEach((d) => { if (d.hour >= 0 && d.hour < 24) values[d.hour] = d.total; });
+        const colors = values.map((_, i) => {
+          if (i >= 6 && i < 12) return c.accent3 + "cc";
+          if (i >= 12 && i < 18) return c.accent + "cc";
+          if (i >= 18 && i < 22) return c.accent4 + "cc";
+          return c.accent2 + "66";
+        });
+        if (charts.hour) { charts.hour.data.datasets[0].data = values; charts.hour.data.datasets[0].backgroundColor = colors; charts.hour.update(); return; }
+        charts.hour = new Chart($("chart-hour"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 3 }] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+      }
+
       // ---------- KPIs ----------
       function pctChange(cur, prev) {
         if (!prev || prev === 0) return null;
@@ -420,16 +492,16 @@
         return pct > 0 ? "up" : pct < 0 ? "down" : "flat";
       }
 
-      function updateKPIs(trend, cat, neigh) {
-        if (!trend.length) return;
-        const latest = trend[trend.length - 1];
+      function updateKPIs(trendAll, cat, neigh) {
+        if (!trendAll.length) return;
+        const latest = trendAll[trendAll.length - 1];
 
         $("kpi-latest-label").textContent = latest.month_label || latest.month;
         $("kpi-latest-val").textContent = latest.total.toLocaleString();
         $("kpi-latest-detail").textContent = "offenses";
 
         const latestMo = parseInt(latest.month.split("-")[1], 10);
-        const sameMonthEntries = trend.filter((d) => {
+        const sameMonthEntries = trendAll.filter((d) => {
           const mo = parseInt(d.month.split("-")[1], 10);
           return mo === latestMo && d.month !== latest.month;
         });
@@ -455,58 +527,44 @@
         }
       }
 
-      // ---------- HOUR OF DAY ----------
-      function renderHourChart(data) {
-        const c = themeColors();
-        const labels = Array.from({ length: 24 }, (_, i) => {
-          const h = i % 12 || 12;
-          return `${h}${i < 12 ? "a" : "p"}`;
-        });
-        const values = new Array(24).fill(0);
-        data.forEach((d) => { if (d.hour >= 0 && d.hour < 24) values[d.hour] = d.total; });
-        const colors = values.map((_, i) => {
-          if (i >= 6 && i < 12) return c.accent3 + "cc";
-          if (i >= 12 && i < 18) return c.accent + "cc";
-          if (i >= 18 && i < 22) return c.accent4 + "cc";
-          return c.accent2 + "66";
-        });
-        if (charts.hour) { charts.hour.data.datasets[0].data = values; charts.hour.data.datasets[0].backgroundColor = colors; charts.hour.update(); return; }
-        charts.hour = new Chart($("chart-hour"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 3 }] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
-      }
-
-      // ---------- PRECIP ANALYSIS ----------
-      function renderPrecipScatter(points, rPrecip) {
-        const c = themeColors();
-        const pts = points.map((d) => ({ x: parseFloat(d.precip_mm), y: d.total, month: d.month }));
-        $("precip-scatter-title").textContent = `Precipitation vs. Crime (r = ${rPrecip != null ? rPrecip : "N/A"})`;
-        if (charts.precipScatter) { charts.precipScatter.data.datasets[0].data = pts; charts.precipScatter.update(); return; }
-        charts.precipScatter = new Chart($("chart-precip-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent2 + "aa", borderColor: c.accent2, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Precipitation (mm)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Precip: ${d.x}mm`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
-      }
-
       // ---------- REFRESH ----------
       async function refreshAll() {
         statusEl.textContent = "Updating...";
         statusEl.classList.remove("error");
         try {
-          const q = qs();
-          const [trend, cat, neigh, demo, seasonal, corr, geo, precipCat, hourly, precipAnalysis] = await Promise.all([
-            fetchJson("/api/trend" + q), fetchJson("/api/by-category" + q), fetchJson("/api/by-neighborhood" + q),
-            fetchJson("/api/demographics" + q),
-            fetchJson("/api/seasonality" + q), fetchJson("/api/correlation" + q), fetchJson("/api/geo" + q),
-            fetchJson("/api/precip-by-category" + q),
-            fetchJson("/api/by-hour" + q), fetchJson("/api/precip-analysis" + q),
+          const qCurrent = qs();
+          const qHist = qsHistorical();
+
+          const [trendAll, cat, neigh, geo, hourly] = await Promise.all([
+            fetchJson("/api/trend" + qHist),
+            fetchJson("/api/by-category" + qCurrent),
+            fetchJson("/api/by-neighborhood" + qCurrent),
+            fetchJson("/api/geo" + qCurrent),
+            fetchJson("/api/by-hour" + qCurrent),
           ]);
-          updateKPIs(trend, cat, neigh);
+
+          updateKPIs(trendAll, cat, neigh);
           renderCategory(cat);
           renderNeighborhood(neigh);
           renderHourChart(hourly);
           renderMap(geo);
-          renderTrend(trend);
-          renderSeasonality(seasonal);
-          renderCorrScatter(corr);
-          renderPrecipCategory(precipCat);
-          renderPrecipScatter(precipAnalysis.points || [], precipAnalysis.r_precip);
-          renderDemographics(demo);
+
+          if (activeTab === "historical" || charts.trend) {
+            const [seasonal, corr, precipCat, precipAnalysis, demo] = await Promise.all([
+              fetchJson("/api/seasonality" + qHist),
+              fetchJson("/api/correlation" + qHist),
+              fetchJson("/api/precip-by-category" + qHist),
+              fetchJson("/api/precip-analysis" + qHist),
+              fetchJson("/api/demographics" + qHist),
+            ]);
+            renderTrend(trendAll);
+            renderSeasonality(seasonal);
+            renderCorrScatter(corr);
+            renderPrecipCategory(precipCat);
+            renderPrecipScatter(precipAnalysis.points || [], precipAnalysis.r_precip);
+            renderDemographics(demo);
+          }
+
           statusEl.textContent = "";
         } catch (e) {
           statusEl.classList.add("error");
@@ -518,10 +576,13 @@
       // ---------- URL STATE ----------
       function pushFilterState() {
         const p = new URLSearchParams();
-        const s = $("f-start").value, e = $("f-end").value;
+        if (activeTab !== "current") {
+          const s = $("f-start").value, e = $("f-end").value;
+          if (s && s !== defaultStart) p.set("start", s);
+          if (e && e !== defaultEnd) p.set("end", e);
+        }
+        if (activeTab !== "current") p.set("tab", "historical");
         const n = $("f-neighborhood").value, c = $("f-category").value;
-        if (s && s !== defaultStart) p.set("start", s);
-        if (e && e !== defaultEnd) p.set("end", e);
         if (n) p.set("neighborhood", n);
         if (c) p.set("category", c);
         const qs = p.toString();
@@ -534,6 +595,7 @@
         if (p.has("end")) $("f-end").value = p.get("end");
         if (p.has("neighborhood")) $("f-neighborhood").value = p.get("neighborhood");
         if (p.has("category")) $("f-category").value = p.get("category");
+        if (p.get("tab") === "historical") switchTab("historical");
       }
 
       function onFilterChange() { pushFilterState(); refreshAll(); }
@@ -551,7 +613,7 @@
             const d = new Date(meta.last_refreshed);
             parts.push("refreshed " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
           }
-          if (parts.length) $("freshness").textContent = "· " + parts.join(" · ");
+          if (parts.length) $("freshness").textContent = "\u00B7 " + parts.join(" \u00B7 ");
         } catch (_) {}
       }
 
