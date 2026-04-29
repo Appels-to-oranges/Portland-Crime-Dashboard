@@ -164,7 +164,7 @@
         </div>
 
         <div class="section-label">Demographics &amp; Socioeconomics</div>
-        <div class="chart-card wide"><h2 id="demo-bar-title">Offense Rate by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
+        <div class="chart-card wide"><h2 id="demo-bar-title">Offense Rate by Neighborhood</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
         <div class="chart-card wide"><h2 id="demo-income-title">Median Income vs. Offense Rate</h2><div class="chart-wrap"><canvas id="chart-demo-income"></canvas></div></div>
       </div>
     </div>
@@ -371,7 +371,7 @@
         ensurePalette();
         const labels = data.map((d) => d.category), values = data.map((d) => d.total), colors = data.map((_, i) => PALETTE[i % PALETTE.length]);
         if (charts.category) { charts.category.data.labels = labels; charts.category.data.datasets[0].data = values; charts.category.data.datasets[0].backgroundColor = colors; charts.category.update(); return; }
-        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = charts.category.data.labels[elems[0].index]; $("f-category").value = $("f-category").value === clicked ? "" : clicked; refreshAll(); } } });
+        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false }, ticks: { autoSkip: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = charts.category.data.labels[elems[0].index]; $("f-category").value = $("f-category").value === clicked ? "" : clicked; refreshAll(); } } });
       }
 
       // ---------- NEIGHBORHOOD ----------
@@ -404,7 +404,7 @@
             scales: {
               x: { min: -1, max: 1, title: { display: true, text: "Pearson r (precip vs. offenses)" },
                 grid: { color(ctx) { return ctx.tick.value === 0 ? c.text : c.grid; } } },
-              y: { grid: { display: false } },
+              y: { grid: { display: false }, ticks: { autoSkip: false } },
             },
             plugins: {
               legend: { display: false },
@@ -427,14 +427,14 @@
         const c = themeColors();
         const all = data.filter((d) => d.population >= 1000 && d.poverty_rate_pct != null);
         const sorted = all
-          .map((d) => ({ zcta: d.zcta, rate: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), poverty: parseFloat(d.poverty_rate_pct), income: d.median_income || 0, pop: d.population, offenses: d.total_offenses }))
+          .map((d) => ({ zcta: d.zcta, neighborhood: d.primary_neighborhood || d.zcta, rate: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), poverty: parseFloat(d.poverty_rate_pct), income: d.median_income || 0, pop: d.population, offenses: d.total_offenses }))
           .sort((a, b) => b.rate - a.rate)
           .slice(0, 15);
 
-        const labels = sorted.map((d) => d.zcta);
+        const labels = sorted.map((d) => d.neighborhood);
         const rates = sorted.map((d) => d.rate);
         const rVal = pearsonR(all.map((d) => parseFloat(d.poverty_rate_pct)), all.map((d) => (d.total_offenses / d.population) * 1000));
-        $("demo-bar-title").innerHTML = `Offense Rate by ZCTA <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">colored by poverty &middot; r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
+        $("demo-bar-title").innerHTML = `Offense Rate by Neighborhood <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">colored by poverty &middot; r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
 
         const maxPov = Math.max(...sorted.map((d) => d.poverty));
         const colors = sorted.map((d) => {
@@ -450,8 +450,8 @@
           data: { labels, datasets: [{ label: "Offenses / 1k pop", data: rates, backgroundColor: colors, borderRadius: 4 }] },
           options: {
             indexAxis: "y",
-            scales: { x: { beginAtZero: true, title: { display: true, text: "Offenses per 1,000 pop" } }, y: { grid: { display: false } } },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return [`Poverty: ${d.poverty}%`, `Income: $${d.income.toLocaleString()}`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
+            scales: { x: { beginAtZero: true, title: { display: true, text: "Offenses per 1,000 pop" } }, y: { grid: { display: false }, ticks: { autoSkip: false } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return [`ZCTA ${d.zcta}`, `Poverty: ${d.poverty}%`, `Income: $${d.income.toLocaleString()}`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
           },
         });
       }
@@ -460,20 +460,20 @@
         const c = themeColors();
         const pts = data
           .filter((d) => d.population >= 1000 && d.median_income > 0)
-          .map((d) => ({ x: d.median_income, y: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), zcta: d.zcta, pop: d.population, poverty: parseFloat(d.poverty_rate_pct) || 0 }));
+          .map((d) => ({ x: d.median_income, y: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), zcta: d.zcta, neighborhood: d.primary_neighborhood || d.zcta, pop: d.population, poverty: parseFloat(d.poverty_rate_pct) || 0 }));
         const rVal = pearsonR(pts.map((p) => p.x), pts.map((p) => p.y));
         $("demo-income-title").innerHTML = `Median Income vs. Offense Rate <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
 
         if (charts.demoIncome) { charts.demoIncome.data.datasets[0].data = pts; charts.demoIncome.update(); return; }
         charts.demoIncome = new Chart($("chart-demo-income"), {
           type: "scatter",
-          data: { datasets: [{ label: "ZCTAs", data: pts, backgroundColor: c.accent2 + "99", borderColor: c.accent2, pointRadius: 6, pointHoverRadius: 9 }] },
+          data: { datasets: [{ label: "Neighborhoods", data: pts, backgroundColor: c.accent2 + "99", borderColor: c.accent2, pointRadius: 6, pointHoverRadius: 9 }] },
           options: {
             scales: {
               x: { title: { display: true, text: "Median Household Income ($)" }, ticks: { callback(v) { return "$" + (v / 1000).toFixed(0) + "k"; } } },
               y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true },
             },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`ZCTA ${d.zcta}`, `Income: $${d.x.toLocaleString()}`, `Rate: ${d.y}/1k`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`${d.neighborhood} (${d.zcta})`, `Income: $${d.x.toLocaleString()}`, `Rate: ${d.y}/1k`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
           },
         });
       }

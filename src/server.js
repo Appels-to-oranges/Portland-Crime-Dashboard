@@ -168,15 +168,27 @@ app.get("/api/demographics", async (req, res) => {
   const { clause, params } = parseZctaFilters(req.query);
   try {
     const { rows } = await pool.query(
-      `SELECT zcta,
-              sum(offense_count)::int AS total_offenses,
-              max(population)::int AS population,
-              round(max(poverty_rate_pct)::numeric, 1) AS poverty_rate_pct,
-              max(median_household_income)::int AS median_income
-       FROM marts.mart_offense_monthly_zcta
-       WHERE zcta IS NOT NULL AND population > 0 ${clause}
-       GROUP BY zcta
-       ORDER BY total_offenses DESC`,
+      `WITH zcta_stats AS (
+         SELECT zcta,
+                sum(offense_count)::int AS total_offenses,
+                max(population)::int AS population,
+                round(max(poverty_rate_pct)::numeric, 1) AS poverty_rate_pct,
+                max(median_household_income)::int AS median_income
+         FROM marts.mart_offense_monthly_zcta
+         WHERE zcta IS NOT NULL AND population > 0 ${clause}
+         GROUP BY zcta
+       ),
+       zcta_neigh AS (
+         SELECT zcta, neighborhood,
+                row_number() OVER (PARTITION BY zcta ORDER BY sum(offense_count) DESC) AS rn
+         FROM marts.mart_offense_monthly_zcta
+         WHERE zcta IS NOT NULL AND neighborhood IS NOT NULL ${clause}
+         GROUP BY zcta, neighborhood
+       )
+       SELECT s.*, n.neighborhood AS primary_neighborhood
+       FROM zcta_stats s
+       LEFT JOIN zcta_neigh n ON s.zcta = n.zcta AND n.rn = 1
+       ORDER BY s.total_offenses DESC`,
       params,
     );
     res.json(rows);
