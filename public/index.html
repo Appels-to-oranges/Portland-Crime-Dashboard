@@ -132,10 +132,15 @@
           <div class="detail" id="kpi-top-cat-detail"></div>
         </div>
 
-        <div class="chart-card wide"><h2>Offenses by Category</h2><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
-        <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
+        <div class="section-label">Overview</div>
+        <div class="chart-card wide"><h2>Last 12 Months</h2><div class="chart-wrap"><canvas id="chart-monthly-trend"></canvas></div></div>
         <div class="chart-card wide"><h2>Crime by Hour of Day</h2><div class="chart-wrap"><canvas id="chart-hour"></canvas></div></div>
 
+        <div class="section-label">Breakdowns</div>
+        <div class="chart-card wide"><h2>Offenses by Category</h2><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
+        <div class="chart-card wide"><h2>Top 15 Neighborhoods</h2><div class="chart-wrap"><canvas id="chart-neighborhood"></canvas></div></div>
+
+        <div class="section-label">Geography</div>
         <div class="chart-card full" style="min-height:32rem">
           <h2>Crime by ZCTA &mdash; Choropleth (offenses per 1,000 pop)</h2>
           <div class="chart-wrap"><div id="map"></div></div>
@@ -146,18 +151,21 @@
     <!-- HISTORICAL TAB -->
     <div class="tab-panel" id="panel-historical">
       <div class="dashboard">
+        <div class="section-label">Crime Trends</div>
         <div class="chart-card wide"><h2>Monthly Crime Trend</h2><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
         <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
 
+        <div class="section-label">Weather &amp; Crime</div>
         <div class="chart-card wide"><h2 id="scatter-title">Temperature vs. Crime</h2><div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div></div>
         <div class="chart-card wide"><h2 id="precip-scatter-title">Precipitation vs. Crime</h2><div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div></div>
-
         <div class="chart-card full">
           <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
           <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
         </div>
 
-        <div class="chart-card full"><h2>Demographics &amp; Crime by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
+        <div class="section-label">Demographics &amp; Socioeconomics</div>
+        <div class="chart-card wide"><h2 id="demo-bar-title">Offense Rate by ZCTA</h2><div class="chart-wrap"><canvas id="chart-demographics"></canvas></div></div>
+        <div class="chart-card wide"><h2 id="demo-income-title">Median Income vs. Offense Rate</h2><div class="chart-wrap"><canvas id="chart-demo-income"></canvas></div></div>
       </div>
     </div>
 
@@ -407,14 +415,67 @@
       }
 
       // ---------- DEMOGRAPHICS ----------
+      function pearsonR(xs, ys) {
+        const n = xs.length;
+        let sX = 0, sY = 0, sXY = 0, sX2 = 0, sY2 = 0;
+        for (let i = 0; i < n; i++) { sX += xs[i]; sY += ys[i]; sXY += xs[i] * ys[i]; sX2 += xs[i] * xs[i]; sY2 += ys[i] * ys[i]; }
+        const denom = Math.sqrt((n * sX2 - sX * sX) * (n * sY2 - sY * sY));
+        return denom === 0 ? NaN : (n * sXY - sX * sY) / denom;
+      }
+
       function renderDemographics(data) {
         const c = themeColors();
-        const pts = data.filter((d) => d.population > 0 && d.poverty_rate_pct != null).map((d) => ({
-          x: parseFloat(d.poverty_rate_pct), y: (d.total_offenses / d.population) * 1000,
-          r: Math.max(3, Math.sqrt(d.population) / 8), zcta: d.zcta, pop: d.population, income: d.median_income, offenses: d.total_offenses,
-        }));
-        if (charts.demographics) { charts.demographics.data.datasets[0].data = pts; charts.demographics.update(); return; }
-        charts.demographics = new Chart($("chart-demographics"), { type: "bubble", data: { datasets: [{ label: "ZCTAs", data: pts, backgroundColor: c.accent4 + "99", borderColor: c.accent4, borderWidth: 1 }] }, options: { scales: { x: { title: { display: true, text: "Poverty Rate (%)" }, beginAtZero: true }, y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`ZCTA ${d.zcta}`, `Pop: ${d.pop.toLocaleString()}`, `Poverty: ${d.x}%`, `Income: $${(d.income||0).toLocaleString()}`, `Offenses/1k: ${d.y.toFixed(1)}`]; } } } } } });
+        const all = data.filter((d) => d.population >= 1000 && d.poverty_rate_pct != null);
+        const sorted = all
+          .map((d) => ({ zcta: d.zcta, rate: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), poverty: parseFloat(d.poverty_rate_pct), income: d.median_income || 0, pop: d.population, offenses: d.total_offenses }))
+          .sort((a, b) => b.rate - a.rate)
+          .slice(0, 15);
+
+        const labels = sorted.map((d) => d.zcta);
+        const rates = sorted.map((d) => d.rate);
+        const rVal = pearsonR(all.map((d) => parseFloat(d.poverty_rate_pct)), all.map((d) => (d.total_offenses / d.population) * 1000));
+        $("demo-bar-title").innerHTML = `Offense Rate by ZCTA <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">colored by poverty &middot; r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
+
+        const maxPov = Math.max(...sorted.map((d) => d.poverty));
+        const colors = sorted.map((d) => {
+          const t = d.poverty / maxPov;
+          if (t < 0.33) return c.accent + "cc";
+          if (t < 0.66) return c.accent3 + "cc";
+          return "#ef4444cc";
+        });
+
+        if (charts.demographics) { charts.demographics.data.labels = labels; charts.demographics.data.datasets[0].data = rates; charts.demographics.data.datasets[0].backgroundColor = colors; charts.demographics.update(); return; }
+        charts.demographics = new Chart($("chart-demographics"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Offenses / 1k pop", data: rates, backgroundColor: colors, borderRadius: 4 }] },
+          options: {
+            indexAxis: "y",
+            scales: { x: { beginAtZero: true, title: { display: true, text: "Offenses per 1,000 pop" } }, y: { grid: { display: false } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return [`Poverty: ${d.poverty}%`, `Income: $${d.income.toLocaleString()}`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
+          },
+        });
+      }
+
+      function renderDemoIncome(data) {
+        const c = themeColors();
+        const pts = data
+          .filter((d) => d.population >= 1000 && d.median_income > 0)
+          .map((d) => ({ x: d.median_income, y: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), zcta: d.zcta, pop: d.population, poverty: parseFloat(d.poverty_rate_pct) || 0 }));
+        const rVal = pearsonR(pts.map((p) => p.x), pts.map((p) => p.y));
+        $("demo-income-title").innerHTML = `Median Income vs. Offense Rate <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
+
+        if (charts.demoIncome) { charts.demoIncome.data.datasets[0].data = pts; charts.demoIncome.update(); return; }
+        charts.demoIncome = new Chart($("chart-demo-income"), {
+          type: "scatter",
+          data: { datasets: [{ label: "ZCTAs", data: pts, backgroundColor: c.accent2 + "99", borderColor: c.accent2, pointRadius: 6, pointHoverRadius: 9 }] },
+          options: {
+            scales: {
+              x: { title: { display: true, text: "Median Household Income ($)" }, ticks: { callback(v) { return "$" + (v / 1000).toFixed(0) + "k"; } } },
+              y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true },
+            },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`ZCTA ${d.zcta}`, `Income: $${d.x.toLocaleString()}`, `Rate: ${d.y}/1k`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
+          },
+        });
       }
 
       // ---------- SEASONALITY ----------
@@ -465,6 +526,35 @@
         });
         if (charts.hour) { charts.hour.data.datasets[0].data = values; charts.hour.data.datasets[0].backgroundColor = colors; charts.hour.update(); return; }
         charts.hour = new Chart($("chart-hour"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 3 }] }, options: { scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+      }
+
+      // ---------- MONTHLY TREND (last 12 months) ----------
+      function renderMonthlyTrend(trendAll) {
+        const c = themeColors();
+        const recent = trendAll.slice(-12);
+        const labels = recent.map((d) => {
+          const parts = d.month.split("-");
+          return MONTHS[parseInt(parts[1], 10) - 1] + " '" + parts[0].slice(2);
+        });
+        const values = recent.map((d) => d.total);
+        if (charts.monthlyTrend) { charts.monthlyTrend.data.labels = labels; charts.monthlyTrend.data.datasets[0].data = values; charts.monthlyTrend.update(); return; }
+        charts.monthlyTrend = new Chart($("chart-monthly-trend"), {
+          type: "line",
+          data: { labels, datasets: [{
+            label: "Offenses", data: values, borderColor: c.accent, backgroundColor: c.accent + "18",
+            fill: true, tension: 0.3,
+            pointRadius: values.map((_, i) => i === values.length - 1 ? 6 : 3),
+            pointBackgroundColor: values.map((_, i) => i === values.length - 1 ? c.accent : c.accent + "99"),
+            pointBorderColor: values.map((_, i) => i === values.length - 1 ? c.text : "transparent"),
+            pointBorderWidth: values.map((_, i) => i === values.length - 1 ? 2 : 0),
+            pointHoverRadius: 6,
+          }] },
+          options: {
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true } },
+            plugins: { legend: { display: false } },
+            interaction: { intersect: false, mode: "index" },
+          },
+        });
       }
 
       // ---------- KPIs ----------
@@ -543,6 +633,7 @@
           renderNeighborhood(neigh);
           renderHourChart(hourly);
           renderMap(geo);
+          renderMonthlyTrend(trendAll);
 
           if (activeTab === "historical" || charts.trend) {
             const [seasonal, corr, precipCat, precipAnalysis, demo] = await Promise.all([
@@ -558,6 +649,7 @@
             renderPrecipCategory(precipCat);
             renderPrecipScatter(precipAnalysis.points || [], precipAnalysis.r_precip);
             renderDemographics(demo);
+            renderDemoIncome(demo);
           }
 
           statusEl.textContent = "";
