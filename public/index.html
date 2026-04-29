@@ -156,8 +156,8 @@
         <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
 
         <div class="section-label">Weather &amp; Crime</div>
-        <div class="chart-card wide"><h2 id="scatter-title">Temperature vs. Crime</h2><div class="chart-wrap"><canvas id="chart-corr-scatter"></canvas></div></div>
-        <div class="chart-card wide"><h2 id="precip-scatter-title">Precipitation vs. Crime</h2><div class="chart-wrap"><canvas id="chart-precip-scatter"></canvas></div></div>
+        <div class="chart-card wide"><h2 id="temp-bucket-title">Avg Offenses by Temperature Range</h2><div class="chart-wrap"><canvas id="chart-temp-buckets"></canvas></div></div>
+        <div class="chart-card wide"><h2 id="yearly-title">Crime by Year</h2><div class="chart-wrap"><canvas id="chart-yearly"></canvas></div></div>
         <div class="chart-card full">
           <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
           <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
@@ -371,7 +371,7 @@
         ensurePalette();
         const labels = data.map((d) => d.category), values = data.map((d) => d.total), colors = data.map((_, i) => PALETTE[i % PALETTE.length]);
         if (charts.category) { charts.category.data.labels = labels; charts.category.data.datasets[0].data = values; charts.category.data.datasets[0].backgroundColor = colors; charts.category.update(); return; }
-        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = labels[elems[0].index]; $("f-category").value = $("f-category").value === clicked ? "" : clicked; refreshAll(); } } });
+        charts.category = new Chart($("chart-category"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = charts.category.data.labels[elems[0].index]; $("f-category").value = $("f-category").value === clicked ? "" : clicked; refreshAll(); } } });
       }
 
       // ---------- NEIGHBORHOOD ----------
@@ -379,7 +379,7 @@
         const c = themeColors();
         const labels = data.map((d) => d.neighborhood), values = data.map((d) => d.total);
         if (charts.neighborhood) { charts.neighborhood.data.labels = labels; charts.neighborhood.data.datasets[0].data = values; charts.neighborhood.update(); return; }
-        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false }, ticks: { autoSkip: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = labels[elems[0].index]; $("f-neighborhood").value = $("f-neighborhood").value === clicked ? "" : clicked; refreshAll(); } } });
+        charts.neighborhood = new Chart($("chart-neighborhood"), { type: "bar", data: { labels, datasets: [{ label: "Offenses", data: values, backgroundColor: c.accent + "cc", borderRadius: 4 }] }, options: { indexAxis: "y", scales: { x: { beginAtZero: true }, y: { grid: { display: false }, ticks: { autoSkip: false } } }, plugins: { legend: { display: false } }, onClick(_e, elems) { if (!elems.length) return; const clicked = charts.neighborhood.data.labels[elems[0].index]; $("f-neighborhood").value = $("f-neighborhood").value === clicked ? "" : clicked; refreshAll(); } } });
       }
 
       // ---------- PRECIP BY CATEGORY ----------
@@ -491,22 +491,54 @@
         ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Avg Offenses" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "Avg High Temp (\u00B0F)" } } }, interaction: { intersect: false, mode: "index" } } });
       }
 
-      // ---------- TEMP SCATTER ----------
-      function renderCorrScatter(corrData) {
+      // ---------- TEMP BUCKETS ----------
+      function renderTempBuckets(corrData) {
         const c = themeColors();
-        const pts = corrData.points.filter((d) => d.avg_high_c != null).map((d) => ({ x: Math.round(cToF(parseFloat(d.avg_high_c))), y: d.total, month: d.month }));
-        $("scatter-title").textContent = `Temperature vs. Crime (r = ${corrData.r_temp != null ? corrData.r_temp : "N/A"})`;
-        if (charts.corrScatter) { charts.corrScatter.data.datasets[0].data = pts; charts.corrScatter.update(); return; }
-        charts.corrScatter = new Chart($("chart-corr-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent3 + "aa", borderColor: c.accent3, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Avg High Temp (\u00B0F)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Temp: ${d.x}\u00B0F`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
+        const pts = corrData.points.filter((d) => d.avg_high_c != null).map((d) => ({ temp: Math.round(cToF(parseFloat(d.avg_high_c))), total: d.total }));
+        const buckets = [
+          { label: "Cold (<50\u00B0F)", min: -Infinity, max: 50, color: c.accent2 },
+          { label: "Cool (50\u201360)", min: 50, max: 60, color: "#22d3ee" },
+          { label: "Mild (60\u201370)", min: 60, max: 70, color: c.accent3 },
+          { label: "Warm (70\u201380)", min: 70, max: 80, color: "#f97316" },
+          { label: "Hot (80+\u00B0F)", min: 80, max: Infinity, color: "#ef4444" },
+        ];
+        const labels = buckets.map((b) => b.label);
+        const values = buckets.map((b) => { const m = pts.filter((p) => p.temp >= b.min && p.temp < b.max); return m.length ? Math.round(m.reduce((s, p) => s + p.total, 0) / m.length) : 0; });
+        const colors = buckets.map((b) => b.color + "cc");
+        const counts = buckets.map((b) => pts.filter((p) => p.temp >= b.min && p.temp < b.max).length);
+        $("temp-bucket-title").innerHTML = `Avg Offenses by Temperature <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">r = ${corrData.r_temp != null ? corrData.r_temp : "N/A"}</span>`;
+
+        if (charts.tempBuckets) { charts.tempBuckets.data.labels = labels; charts.tempBuckets.data.datasets[0].data = values; charts.tempBuckets.data.datasets[0].backgroundColor = colors; charts.tempBuckets.update(); return; }
+        charts.tempBuckets = new Chart($("chart-temp-buckets"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Avg Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] },
+          options: {
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "Avg Monthly Offenses" } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { return `${counts[ctx.dataIndex]} months in range`; } } } },
+          },
+        });
       }
 
-      // ---------- PRECIP SCATTER ----------
-      function renderPrecipScatter(points, rPrecip) {
+      // ---------- YEARLY TOTALS ----------
+      function renderYearlyTotals(trendAll) {
         const c = themeColors();
-        const pts = points.map((d) => ({ x: parseFloat(d.precip_mm), y: d.total, month: d.month }));
-        $("precip-scatter-title").textContent = `Precipitation vs. Crime (r = ${rPrecip != null ? rPrecip : "N/A"})`;
-        if (charts.precipScatter) { charts.precipScatter.data.datasets[0].data = pts; charts.precipScatter.update(); return; }
-        charts.precipScatter = new Chart($("chart-precip-scatter"), { type: "scatter", data: { datasets: [{ label: "Monthly", data: pts, backgroundColor: c.accent2 + "aa", borderColor: c.accent2, pointRadius: 5, pointHoverRadius: 8 }] }, options: { scales: { x: { title: { display: true, text: "Precipitation (mm)" } }, y: { title: { display: true, text: "Total Offenses" }, beginAtZero: true } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`Month: ${d.month}`, `Precip: ${d.x}mm`, `Offenses: ${d.y.toLocaleString()}`]; } } } } } });
+        const byYear = {};
+        trendAll.forEach((d) => { const yr = d.month.split("-")[0]; byYear[yr] = (byYear[yr] || 0) + d.total; });
+        const labels = Object.keys(byYear).sort();
+        const values = labels.map((y) => byYear[y]);
+        const monthCounts = {};
+        trendAll.forEach((d) => { const yr = d.month.split("-")[0]; monthCounts[yr] = (monthCounts[yr] || 0) + 1; });
+        const barColors = labels.map((yr) => monthCounts[yr] < 12 ? c.accent + "55" : c.accent + "cc");
+
+        if (charts.yearly) { charts.yearly.data.labels = labels; charts.yearly.data.datasets[0].data = values; charts.yearly.data.datasets[0].backgroundColor = barColors; charts.yearly.update(); return; }
+        charts.yearly = new Chart($("chart-yearly"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Total Offenses", data: values, backgroundColor: barColors, borderRadius: 4 }] },
+          options: {
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "Total Offenses" } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { const yr = labels[ctx.dataIndex]; const mo = monthCounts[yr]; return mo < 12 ? `${mo} months (partial year)` : "12 months"; } } } },
+          },
+        });
       }
 
       // ---------- HOUR OF DAY ----------
@@ -636,18 +668,17 @@
           renderMonthlyTrend(trendAll);
 
           if (activeTab === "historical" || charts.trend) {
-            const [seasonal, corr, precipCat, precipAnalysis, demo] = await Promise.all([
+            const [seasonal, corr, precipCat, demo] = await Promise.all([
               fetchJson("/api/seasonality" + qHist),
               fetchJson("/api/correlation" + qHist),
               fetchJson("/api/precip-by-category" + qHist),
-              fetchJson("/api/precip-analysis" + qHist),
               fetchJson("/api/demographics" + qHist),
             ]);
             renderTrend(trendAll);
             renderSeasonality(seasonal);
-            renderCorrScatter(corr);
+            renderTempBuckets(corr);
+            renderYearlyTotals(trendAll);
             renderPrecipCategory(precipCat);
-            renderPrecipScatter(precipAnalysis.points || [], precipAnalysis.r_precip);
             renderDemographics(demo);
             renderDemoIncome(demo);
           }
