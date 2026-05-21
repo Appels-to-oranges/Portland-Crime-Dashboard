@@ -223,21 +223,40 @@ async function main() {
     )
   `);
 
-  console.error("Downloading ZCTA–county relationship file…");
-  const relText = await fetchText(REL_URL);
-  const orWaZctas = loadOrWaZctaSet(relText);
-  console.error(`OR/WA ZCTAs (unique): ${orWaZctas.size}`);
+  // Check if static reference data already exists (ZCTA geometry, reference, ACS).
+  // These rarely change so we skip re-downloading unless FULL_REFRESH=1 or tables are empty.
+  const forceRef = process.env.FULL_REFRESH === "1";
+  const { rows: existingRef } = await client.query(`
+    SELECT
+      (SELECT count(*)::int FROM raw.zcta_geometry) AS geo_ct,
+      (SELECT count(*)::int FROM raw.zcta_reference) AS ref_ct,
+      (SELECT count(*)::int FROM raw.acs_zcta) AS acs_ct
+  `);
+  const hasRef = existingRef[0]?.geo_ct > 0 && existingRef[0]?.ref_ct > 0 && existingRef[0]?.acs_ct > 0;
 
-  const zctaPolyRows = await loadZctaPolygons(orWaZctas);
+  let zctaPolyRows, zctaRows, acsRows;
+  if (hasRef && !forceRef) {
+    console.error("Static reference data already loaded — skipping ZCTA/ACS downloads (set FULL_REFRESH=1 to force).");
+    zctaPolyRows = null;
+    zctaRows = null;
+    acsRows = null;
+  } else {
+    console.error("Downloading ZCTA–county relationship file…");
+    const relText = await fetchText(REL_URL);
+    const orWaZctas = loadOrWaZctaSet(relText);
+    console.error(`OR/WA ZCTAs (unique): ${orWaZctas.size}`);
 
-  console.error("Downloading ZCTA gazetteer (zip)…");
-  const gazBuf = await fetchBuffer(GAZ_URL);
-  const zctaRows = parseGazetteerZctaRows(gazBuf, orWaZctas);
-  console.error(`ZCTA centroid rows: ${zctaRows.length}`);
+    zctaPolyRows = await loadZctaPolygons(orWaZctas);
 
-  console.error(`Fetching ACS ${ACS_YEAR} 5-year (all ZCTAs; filter local)…`);
-  const acsRows = await loadAcsForZctas(orWaZctas);
-  console.error(`ACS rows kept: ${acsRows.length}`);
+    console.error("Downloading ZCTA gazetteer (zip)…");
+    const gazBuf = await fetchBuffer(GAZ_URL);
+    zctaRows = parseGazetteerZctaRows(gazBuf, orWaZctas);
+    console.error(`ZCTA centroid rows: ${zctaRows.length}`);
+
+    console.error(`Fetching ACS ${ACS_YEAR} 5-year (all ZCTAs; filter local)…`);
+    acsRows = await loadAcsForZctas(orWaZctas);
+    console.error(`ACS rows kept: ${acsRows.length}`);
+  }
 
   console.error("Fetching Open-Meteo daily weather…");
   const wxRows = await loadWeatherDaily();
@@ -245,44 +264,46 @@ async function main() {
 
   await client.query("BEGIN");
   try {
-    await client.query(
-      "TRUNCATE raw.zcta_geometry, raw.zcta_reference, raw.acs_zcta, raw.weather_daily",
-    );
+    if (zctaPolyRows) {
+      await client.query("TRUNCATE raw.zcta_geometry, raw.zcta_reference, raw.acs_zcta");
 
-    for (const r of zctaPolyRows) {
-      await client.query(
-        `INSERT INTO raw.zcta_geometry (zcta, geom)
-         VALUES (
-           $1,
-           ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($2::json), 4326))
-         )`,
-        [r.zcta, r.geojson],
-      );
+      for (const r of zctaPolyRows) {
+        await client.query(
+          `INSERT INTO raw.zcta_geometry (zcta, geom)
+           VALUES (
+             $1,
+             ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($2::json), 4326))
+           )`,
+          [r.zcta, r.geojson],
+        );
+      }
+      await client.query("ANALYZE raw.zcta_geometry");
+
+      for (const r of zctaRows) {
+        await client.query(
+          `INSERT INTO raw.zcta_reference (zcta, intpt_lat, intpt_lon) VALUES ($1, $2, $3)`,
+          [r.zcta, r.intpt_lat, r.intpt_lon],
+        );
+      }
+
+      for (const r of acsRows) {
+        await client.query(
+          `INSERT INTO raw.acs_zcta (zcta, acs_year, population, poverty_universe, poverty_count, median_household_income)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            r.zcta,
+            ACS_YEAR,
+            r.population,
+            r.poverty_universe,
+            r.poverty_count,
+            r.median_household_income,
+          ],
+        );
+      }
     }
-    await client.query("ANALYZE raw.zcta_geometry");
 
-    for (const r of zctaRows) {
-      await client.query(
-        `INSERT INTO raw.zcta_reference (zcta, intpt_lat, intpt_lon) VALUES ($1, $2, $3)`,
-        [r.zcta, r.intpt_lat, r.intpt_lon],
-      );
-    }
-
-    for (const r of acsRows) {
-      await client.query(
-        `INSERT INTO raw.acs_zcta (zcta, acs_year, population, poverty_universe, poverty_count, median_household_income)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          r.zcta,
-          ACS_YEAR,
-          r.population,
-          r.poverty_universe,
-          r.poverty_count,
-          r.median_household_income,
-        ],
-      );
-    }
-
+    // Weather is always refreshed (adds new days)
+    await client.query("TRUNCATE raw.weather_daily");
     for (const r of wxRows) {
       await client.query(
         `INSERT INTO raw.weather_daily (obs_date, temp_max_c, precip_mm) VALUES ($1::date, $2, $3)`,
@@ -291,9 +312,8 @@ async function main() {
     }
 
     await client.query("COMMIT");
-    console.error(
-      "Reference ingest complete: zcta_geometry (PostGIS), zcta_reference, acs_zcta, weather_daily.",
-    );
+    const parts = zctaPolyRows ? "zcta_geometry, zcta_reference, acs_zcta, " : "";
+    console.error(`Reference ingest complete: ${parts}weather_daily.`);
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     throw e;
