@@ -20,14 +20,27 @@ function buildUrl(year) {
   return `${BASE_URL}${year}.csv?:showVizHome=no`;
 }
 
-async function downloadToFile(url, destPath) {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "portland-crime-dashboard/1.0 (data refresh)" },
-  });
-  if (!res.ok) {
-    throw new Error(`Download failed ${res.status} ${res.statusText} for ${url}`);
+async function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function downloadToFile(url, destPath, retries = 3) {
+  const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "portland-crime-dashboard/1.0 (data refresh)",
+  ];
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const ua = userAgents[(attempt - 1) % userAgents.length];
+    const res = await fetch(url, {
+      headers: { "User-Agent": ua, "Accept": "text/csv,*/*" },
+      redirect: "follow",
+    });
+    if (res.ok) {
+      await pipeline(res.body, createWriteStream(destPath));
+      return;
+    }
+    console.error(`Attempt ${attempt}/${retries} failed: ${res.status} ${res.statusText} for ${url}`);
+    if (attempt < retries) await sleep(5000 * attempt);
   }
-  await pipeline(res.body, createWriteStream(destPath));
+  throw new Error(`Download failed after ${retries} attempts for ${url}`);
 }
 
 const COPY_SQL = `
@@ -78,6 +91,17 @@ async function main() {
 
   const tmpDir = await mkdtemp(path.join(tmpdir(), "ppb-csv-"));
   try {
+    // Download all CSVs before touching the database
+    const csvPaths = [];
+    for (const year of years) {
+      const url = buildUrl(year);
+      const csvPath = path.join(tmpDir, `offenses_${year}.csv`);
+      console.error(`Downloading ${year}: ${url}`);
+      await downloadToFile(url, csvPath);
+      csvPaths.push({ year, csvPath });
+      console.error(`Downloaded ${year}.`);
+    }
+
     await client.query("BEGIN");
 
     if (fullRefresh) {
@@ -93,12 +117,7 @@ async function main() {
       }
     }
 
-    for (const year of years) {
-      const url = buildUrl(year);
-      const csvPath = path.join(tmpDir, `offenses_${year}.csv`);
-      console.error(`Downloading ${year}: ${url}`);
-      await downloadToFile(url, csvPath);
-
+    for (const { year, csvPath } of csvPaths) {
       const stream = client.query(copyFrom.from(COPY_SQL));
       await pipeline(createReadStream(csvPath), stream);
       console.error(`Loaded year ${year}.`);
