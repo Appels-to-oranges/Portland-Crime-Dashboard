@@ -17,21 +17,31 @@ const WEATHER_LON = Number(process.env.WEATHER_LON || "-122.6784");
 const WEATHER_START = process.env.WEATHER_START || "2022-01-01";
 const WEATHER_END = process.env.WEATHER_END || new Date().toISOString().slice(0, 10);
 
-const UA = { "User-Agent": "portland-crime-dashboard/1.0 (reference data)" };
+const UA_BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function fetchWithRetry(url, opts = {}, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(url, { headers: { "User-Agent": UA_BROWSER, ...opts.headers }, redirect: "follow" });
+    if (res.ok) return res;
+    console.error(`Attempt ${attempt}/${retries}: ${res.status} ${res.statusText} for ${url}`);
+    if (attempt < retries) await sleep(3000 * attempt);
+  }
+  throw new Error(`GET ${url} failed after ${retries} attempts`);
+}
 
 async function fetchText(url) {
-  const res = await fetch(url, { headers: UA });
-  if (!res.ok) {
-    throw new Error(`GET ${url} failed ${res.status} ${res.statusText}`);
+  const res = await fetchWithRetry(url);
+  const text = await res.text();
+  if (text.trimStart().startsWith("<!") || text.trimStart().startsWith("<html")) {
+    throw new Error(`GET ${url} returned HTML instead of expected data`);
   }
-  return res.text();
+  return text;
 }
 
 async function fetchBuffer(url) {
-  const res = await fetch(url, { headers: UA });
-  if (!res.ok) {
-    throw new Error(`GET ${url} failed ${res.status} ${res.statusText}`);
-  }
+  const res = await fetchWithRetry(url);
   return Buffer.from(await res.arrayBuffer());
 }
 
@@ -83,10 +93,7 @@ async function loadAcsForZctas(orWaZctas) {
     "NAME,B01003_001E,B17001_001E,B17001_002E,B19013_001E",
   );
   url.searchParams.set("for", "zip code tabulation area:*");
-  const res = await fetch(url.toString(), { headers: UA });
-  if (!res.ok) {
-    throw new Error(`Census ACS failed ${res.status} ${res.statusText}`);
-  }
+  const res = await fetchWithRetry(url.toString());
   const data = await res.json();
   if (!Array.isArray(data) || data.length < 2) {
     throw new Error("Census ACS returned unexpected JSON");
@@ -141,10 +148,7 @@ async function loadWeatherDaily() {
   u.searchParams.set("start_date", WEATHER_START);
   u.searchParams.set("end_date", WEATHER_END);
   u.searchParams.set("daily", "temperature_2m_max,precipitation_sum");
-  const res = await fetch(u.toString(), { headers: UA });
-  if (!res.ok) {
-    throw new Error(`Open-Meteo failed ${res.status} ${res.statusText}`);
-  }
+  const res = await fetchWithRetry(u.toString());
   const j = await res.json();
   const times = j.daily?.time ?? [];
   const tmax = j.daily?.temperature_2m_max ?? [];
