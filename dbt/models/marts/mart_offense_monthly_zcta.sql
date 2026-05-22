@@ -29,7 +29,13 @@ select
   w.total_precip_mm as month_total_precip_mm,
   sum(coalesce(b.offense_count, 0)) as offense_count
 from base b
-left join {{ ref("stg_acs_zcta") }} a on b.zcta = a.zcta
+left join lateral (
+  select *
+  from {{ ref("stg_acs_zcta") }} acs
+  where acs.zcta = b.zcta
+  order by abs(acs.acs_year::int - extract(year from b.month_start)::int)
+  limit 1
+) a on true
 left join {{ ref("int_weather_monthly_portland") }} w on b.month_start = w.month_start
 group by
   b.month_start,

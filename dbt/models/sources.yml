@@ -17,6 +17,6 @@ sources:
       - name: zcta_reference
         description: ZCTA internal points for OR/WA (2024 gazetteer); map labels / QA (join uses zcta_geometry).
       - name: acs_zcta
-        description: ACS 5-year (default 2022) for OR/WA ZCTAs — population, poverty counts, median income.
+        description: ACS 5-year estimates for OR/WA ZCTAs — multiple vintages (2022+) auto-detected and synced from Census API. Keyed on (zcta, acs_year).
       - name: weather_daily
         description: Daily max temperature (°C) and precipitation (mm) for a fixed Portland metro point (Open-Meteo).

@@ -11,7 +11,7 @@ const GAZ_URL =
 const ZCTA_CB_ZIP_URL =
   process.env.ZCTA_CB_ZIP_URL ||
   "https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_zcta520_500k.zip";
-const ACS_YEAR = process.env.CENSUS_ACS_YEAR || "2022";
+const ACS_FIRST_YEAR = 2022;
 const WEATHER_LAT = Number(process.env.WEATHER_LAT || "45.5152");
 const WEATHER_LON = Number(process.env.WEATHER_LON || "-122.6784");
 const WEATHER_START = process.env.WEATHER_START || "2022-01-01";
@@ -86,8 +86,8 @@ function parseAcsInt(s) {
   return n;
 }
 
-async function loadAcsForZctas(orWaZctas) {
-  const url = new URL(`https://api.census.gov/data/${ACS_YEAR}/acs/acs5`);
+async function loadAcsForZctas(orWaZctas, acsYear) {
+  const url = new URL(`https://api.census.gov/data/${acsYear}/acs/acs5`);
   url.searchParams.set(
     "get",
     "NAME,B01003_001E,B17001_001E,B17001_002E,B19013_001E",
@@ -139,6 +139,21 @@ async function loadZctaPolygons(orWaZctas) {
   }
   console.error(`ZCTA polygons kept (OR/WA): ${rows.length}`);
   return rows;
+}
+
+async function detectLatestAcsYear() {
+  const currentYear = new Date().getFullYear();
+  for (let yr = currentYear; yr >= ACS_FIRST_YEAR; yr--) {
+    const url = `https://api.census.gov/data/${yr}/acs/acs5?get=NAME&for=us:1`;
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": UA_BROWSER } });
+      if (res.ok) {
+        console.error(`Latest available ACS 5-year vintage: ${yr}`);
+        return yr;
+      }
+    } catch (_) { /* probe next year */ }
+  }
+  return ACS_FIRST_YEAR;
 }
 
 async function loadWeatherDaily() {
@@ -202,15 +217,31 @@ async function main() {
     )
   `);
 
+  // Migrate acs_zcta PK from (zcta) to (zcta, acs_year) if needed
+  const { rows: pkCols } = await client.query(`
+    SELECT a.attname
+    FROM pg_index i
+    JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+    WHERE i.indrelid = 'raw.acs_zcta'::regclass AND i.indisprimary
+    ORDER BY array_position(i.indkey, a.attnum)
+  `).catch(() => ({ rows: [] }));
+  const pkNames = pkCols.map((r) => r.attname);
+  if (pkNames.length === 1 && pkNames[0] === "zcta") {
+    console.error("Migrating raw.acs_zcta PK from (zcta) to (zcta, acs_year)…");
+    await client.query(`ALTER TABLE raw.acs_zcta DROP CONSTRAINT acs_zcta_pkey`);
+    await client.query(`ALTER TABLE raw.acs_zcta ADD PRIMARY KEY (zcta, acs_year)`);
+  }
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS raw.acs_zcta (
-      zcta text NOT NULL PRIMARY KEY,
+      zcta text NOT NULL,
       acs_year text NOT NULL,
       population bigint,
       poverty_universe bigint,
       poverty_count bigint,
       median_household_income integer,
-      _loaded_at timestamptz NOT NULL DEFAULT now()
+      _loaded_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (zcta, acs_year)
     )
   `);
 
@@ -223,27 +254,21 @@ async function main() {
     )
   `);
 
-  // Check if static reference data already exists (ZCTA geometry, reference, ACS).
-  // These rarely change so we skip re-downloading unless FULL_REFRESH=1 or tables are empty.
   const forceRef = process.env.FULL_REFRESH === "1";
   const { rows: existingRef } = await client.query(`
     SELECT
       (SELECT count(*)::int FROM raw.zcta_geometry) AS geo_ct,
-      (SELECT count(*)::int FROM raw.zcta_reference) AS ref_ct,
-      (SELECT count(*)::int FROM raw.acs_zcta) AS acs_ct
+      (SELECT count(*)::int FROM raw.zcta_reference) AS ref_ct
   `);
-  const hasRef = existingRef[0]?.geo_ct > 0 && existingRef[0]?.ref_ct > 0 && existingRef[0]?.acs_ct > 0;
+  const hasGeo = existingRef[0]?.geo_ct > 0 && existingRef[0]?.ref_ct > 0;
 
-  let zctaPolyRows, zctaRows, acsRows;
-  if (hasRef && !forceRef) {
-    console.error("Static reference data already loaded — skipping ZCTA/ACS downloads (set FULL_REFRESH=1 to force).");
-    zctaPolyRows = null;
-    zctaRows = null;
-    acsRows = null;
-  } else {
+  // ZCTA geometry/gazetteer: static Census 2020 data, won't change until 2030
+  let zctaPolyRows = null, zctaRows = null;
+  let orWaZctas = null;
+  if (!hasGeo || forceRef) {
     console.error("Downloading ZCTA–county relationship file…");
     const relText = await fetchText(REL_URL);
-    const orWaZctas = loadOrWaZctaSet(relText);
+    orWaZctas = loadOrWaZctaSet(relText);
     console.error(`OR/WA ZCTAs (unique): ${orWaZctas.size}`);
 
     zctaPolyRows = await loadZctaPolygons(orWaZctas);
@@ -252,10 +277,37 @@ async function main() {
     const gazBuf = await fetchBuffer(GAZ_URL);
     zctaRows = parseGazetteerZctaRows(gazBuf, orWaZctas);
     console.error(`ZCTA centroid rows: ${zctaRows.length}`);
+  } else {
+    console.error("ZCTA geometry already loaded — skipping (set FULL_REFRESH=1 to force).");
+  }
 
-    console.error(`Fetching ACS ${ACS_YEAR} 5-year (all ZCTAs; filter local)…`);
-    acsRows = await loadAcsForZctas(orWaZctas);
-    console.error(`ACS rows kept: ${acsRows.length}`);
+  // ACS: auto-detect latest available vintage and download any missing years
+  const latestAcsYear = await detectLatestAcsYear();
+  const wantedYears = [];
+  for (let yr = ACS_FIRST_YEAR; yr <= latestAcsYear; yr++) wantedYears.push(yr);
+
+  const { rows: storedYearRows } = await client.query(
+    `SELECT DISTINCT acs_year FROM raw.acs_zcta`
+  );
+  const storedYears = new Set(storedYearRows.map((r) => String(r.acs_year)));
+  const missingYears = wantedYears.filter((yr) => !storedYears.has(String(yr)));
+
+  const acsBatches = [];
+  if (missingYears.length > 0 || forceRef) {
+    const yearsToLoad = forceRef ? wantedYears : missingYears;
+    if (!orWaZctas) {
+      console.error("Downloading ZCTA–county relationship file (for ACS filter)…");
+      const relText = await fetchText(REL_URL);
+      orWaZctas = loadOrWaZctaSet(relText);
+    }
+    for (const yr of yearsToLoad) {
+      console.error(`Fetching ACS ${yr} 5-year (all ZCTAs; filter local)…`);
+      const rows = await loadAcsForZctas(orWaZctas, yr);
+      console.error(`ACS ${yr} rows kept: ${rows.length}`);
+      acsBatches.push({ year: yr, rows });
+    }
+  } else {
+    console.error(`ACS vintages up to date (${[...storedYears].sort().join(", ")}).`);
   }
 
   console.error("Fetching Open-Meteo daily weather…");
@@ -265,7 +317,7 @@ async function main() {
   await client.query("BEGIN");
   try {
     if (zctaPolyRows) {
-      await client.query("TRUNCATE raw.zcta_geometry, raw.zcta_reference, raw.acs_zcta");
+      await client.query("TRUNCATE raw.zcta_geometry, raw.zcta_reference");
 
       for (const r of zctaPolyRows) {
         await client.query(
@@ -285,14 +337,22 @@ async function main() {
           [r.zcta, r.intpt_lat, r.intpt_lon],
         );
       }
+    }
 
-      for (const r of acsRows) {
+    if (forceRef && acsBatches.length) {
+      await client.query("TRUNCATE raw.acs_zcta");
+    }
+    for (const batch of acsBatches) {
+      if (!forceRef) {
+        await client.query(`DELETE FROM raw.acs_zcta WHERE acs_year = $1`, [String(batch.year)]);
+      }
+      for (const r of batch.rows) {
         await client.query(
           `INSERT INTO raw.acs_zcta (zcta, acs_year, population, poverty_universe, poverty_count, median_household_income)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             r.zcta,
-            ACS_YEAR,
+            String(batch.year),
             r.population,
             r.poverty_universe,
             r.poverty_count,
@@ -312,8 +372,11 @@ async function main() {
     }
 
     await client.query("COMMIT");
-    const parts = zctaPolyRows ? "zcta_geometry, zcta_reference, acs_zcta, " : "";
-    console.error(`Reference ingest complete: ${parts}weather_daily.`);
+    const parts = [];
+    if (zctaPolyRows) parts.push("zcta_geometry", "zcta_reference");
+    if (acsBatches.length) parts.push(`acs_zcta (${acsBatches.map((b) => b.year).join(", ")})`);
+    parts.push("weather_daily");
+    console.error(`Reference ingest complete: ${parts.join(", ")}.`);
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     throw e;
