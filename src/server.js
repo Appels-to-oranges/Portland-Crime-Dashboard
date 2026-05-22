@@ -123,6 +123,26 @@ app.get("/api/by-category", async (req, res) => {
   }
 });
 
+// Offense counts by category and year
+app.get("/api/category-by-year", async (req, res) => {
+  const { clause, params } = parseFilters(req.query);
+  try {
+    const { rows } = await pool.query(
+      `SELECT extract(year FROM to_date(report_month_year, 'Month YYYY'))::int AS year,
+              offense_category AS category,
+              sum(offense_count)::int AS total
+       FROM marts.mart_offense_monthly_neighborhood
+       WHERE report_month_year IS NOT NULL AND offense_category IS NOT NULL ${clause}
+       GROUP BY 1, 2 ORDER BY 1, total DESC`,
+      params,
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(503).json({ error: "database_unavailable" });
+  }
+});
+
 // Top neighborhoods
 app.get("/api/by-neighborhood", async (req, res) => {
   const { clause, params } = parseFilters(req.query);

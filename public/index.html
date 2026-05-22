@@ -163,6 +163,7 @@
 
         <div class="section-label">Weather &amp; Crime</div>
         <div class="chart-card wide"><h2 id="yearly-title">Crime by Year</h2><div class="chart-wrap"><canvas id="chart-yearly"></canvas></div></div>
+        <div class="chart-card wide"><h2>Category Mix by Year</h2><div class="chart-wrap"><canvas id="chart-category-year"></canvas></div></div>
         <div class="chart-card full">
           <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
           <div class="chart-wrap"><canvas id="chart-precip-category"></canvas></div>
@@ -605,6 +606,52 @@
         });
       }
 
+      // ---------- CATEGORY MIX BY YEAR ----------
+      function renderCategoryByYear(data) {
+        ensurePalette();
+        const catTotals = {};
+        data.forEach((d) => { catTotals[d.category] = (catTotals[d.category] || 0) + d.total; });
+        const topCats = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 5).map((e) => e[0]);
+        const topSet = new Set(topCats);
+
+        const years = [...new Set(data.map((d) => d.year))].sort();
+        const labels = years.map(String);
+
+        const byYearCat = {};
+        data.forEach((d) => {
+          const cat = topSet.has(d.category) ? d.category : "Other";
+          const key = `${d.year}|${cat}`;
+          byYearCat[key] = (byYearCat[key] || 0) + d.total;
+        });
+
+        const categories = [...topCats, "Other"];
+        const datasets = categories.map((cat, i) => ({
+          label: cat,
+          data: years.map((yr) => byYearCat[`${yr}|${cat}`] || 0),
+          backgroundColor: PALETTE[i % PALETTE.length] + "cc",
+          borderRadius: 2,
+        }));
+
+        if (charts.categoryYear) {
+          charts.categoryYear.data.labels = labels;
+          charts.categoryYear.data.datasets = datasets;
+          charts.categoryYear.update();
+          return;
+        }
+        charts.categoryYear = new Chart($("chart-category-year"), {
+          type: "bar",
+          data: { labels, datasets },
+          options: {
+            scales: {
+              x: { stacked: true, grid: { display: false } },
+              y: { stacked: true, beginAtZero: true, title: { display: true, text: "Total Offenses" } },
+            },
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } },
+            interaction: { intersect: false, mode: "index" },
+          },
+        });
+      }
+
       // ---------- HOUR OF DAY ----------
       function renderHourChart(data) {
         const c = themeColors();
@@ -732,15 +779,17 @@
           renderMonthlyTrend(trendAll);
 
           if (activeTab === "historical" || charts.trend) {
-            const [seasonal, precipCat, demo, geoHist] = await Promise.all([
+            const [seasonal, precipCat, demo, geoHist, catByYear] = await Promise.all([
               fetchJson("/api/seasonality" + qHist),
               fetchJson("/api/precip-by-category" + qHist),
               fetchJson("/api/demographics" + qHist),
               fetchJson("/api/geo" + qHist),
+              fetchJson("/api/category-by-year" + qHist),
             ]);
             renderTrend(trendAll);
             renderSeasonality(seasonal);
             renderYearlyTotals(trendAll);
+            renderCategoryByYear(catByYear);
             renderPrecipCategory(precipCat);
             renderDemographics(demo);
             renderDemoIncome(demo);
