@@ -63,7 +63,7 @@
       .chart-card.full { grid-column: span 4; }
       .chart-card h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; margin-bottom: 0.75rem; }
       .chart-wrap { flex: 1; position: relative; min-height: 0; }
-      #map { height: 100%; min-height: 28rem; border-radius: 6px; }
+      #map, #map-historical { height: 100%; min-height: 28rem; border-radius: 6px; }
       .map-legend { position: absolute; bottom: 24px; right: 10px; background: var(--surface); padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; z-index: 1000; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
       .map-legend .lg-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
       .map-legend .lg-swatch { width: 18px; height: 12px; border-radius: 2px; display: inline-block; }
@@ -155,8 +155,13 @@
         <div class="chart-card wide"><h2>Monthly Crime Trend</h2><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
         <div class="chart-card wide"><h2>Seasonal Pattern (avg by month-of-year)</h2><div class="chart-wrap"><canvas id="chart-seasonality"></canvas></div></div>
 
+        <div class="section-label">Geography</div>
+        <div class="chart-card full" style="min-height:32rem">
+          <h2>All-Time Crime by ZCTA &mdash; Choropleth (offenses per 1,000 pop)</h2>
+          <div class="chart-wrap"><div id="map-historical"></div></div>
+        </div>
+
         <div class="section-label">Weather &amp; Crime</div>
-        <div class="chart-card wide"><h2 id="temp-bucket-title">Avg Offenses by Temperature Range</h2><div class="chart-wrap"><canvas id="chart-temp-buckets"></canvas></div></div>
         <div class="chart-card wide"><h2 id="yearly-title">Crime by Year</h2><div class="chart-wrap"><canvas id="chart-yearly"></canvas></div></div>
         <div class="chart-card full">
           <h2>Precipitation Correlation by Crime Category (Pearson r)</h2>
@@ -229,6 +234,7 @@
         pushFilterState();
         refreshAll();
         if (tab === "current" && leafletMap) setTimeout(() => leafletMap.invalidateSize(), 50);
+        if (tab === "historical" && histMap) setTimeout(() => histMap.invalidateSize(), 50);
       }
       document.querySelectorAll(".tab-btn").forEach((btn) => {
         btn.addEventListener("click", () => switchTab(btn.dataset.tab));
@@ -491,32 +497,64 @@
         ] }, options: { scales: { x: { grid: { display: false } }, y: { position: "left", beginAtZero: true, title: { display: true, text: "Avg Offenses" } }, y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "Avg High Temp (\u00B0F)" } } }, interaction: { intersect: false, mode: "index" } } });
       }
 
-      // ---------- TEMP BUCKETS ----------
-      function renderTempBuckets(corrData) {
-        const c = themeColors();
-        const pts = corrData.points.filter((d) => d.avg_high_c != null).map((d) => ({ temp: Math.round(cToF(parseFloat(d.avg_high_c))), total: d.total }));
-        const buckets = [
-          { label: "Cold (<50\u00B0F)", min: -Infinity, max: 50, color: c.accent2 },
-          { label: "Cool (50\u201360)", min: 50, max: 60, color: "#22d3ee" },
-          { label: "Mild (60\u201370)", min: 60, max: 70, color: c.accent3 },
-          { label: "Warm (70\u201380)", min: 70, max: 80, color: "#f97316" },
-          { label: "Hot (80+\u00B0F)", min: 80, max: Infinity, color: "#ef4444" },
-        ];
-        const labels = buckets.map((b) => b.label);
-        const values = buckets.map((b) => { const m = pts.filter((p) => p.temp >= b.min && p.temp < b.max); return m.length ? Math.round(m.reduce((s, p) => s + p.total, 0) / m.length) : 0; });
-        const colors = buckets.map((b) => b.color + "cc");
-        const counts = buckets.map((b) => pts.filter((p) => p.temp >= b.min && p.temp < b.max).length);
-        $("temp-bucket-title").innerHTML = `Avg Offenses by Temperature <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">r = ${corrData.r_temp != null ? corrData.r_temp : "N/A"}</span>`;
+      // ---------- HISTORICAL MAP ----------
+      let histMap = null;
+      let histGeoLayer = null;
+      let histMapLegend = null;
 
-        if (charts.tempBuckets) { charts.tempBuckets.data.labels = labels; charts.tempBuckets.data.datasets[0].data = values; charts.tempBuckets.data.datasets[0].backgroundColor = colors; charts.tempBuckets.update(); return; }
-        charts.tempBuckets = new Chart($("chart-temp-buckets"), {
-          type: "bar",
-          data: { labels, datasets: [{ label: "Avg Offenses", data: values, backgroundColor: colors, borderRadius: 4 }] },
-          options: {
-            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: "Avg Monthly Offenses" } } },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { return `${counts[ctx.dataIndex]} months in range`; } } } },
+      function initHistMap() {
+        if (histMap) return;
+        histMap = L.map("map-historical", { zoomControl: true }).setView([45.52, -122.68], 11);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/" + (isDark() ? "dark_all" : "light_all") + "/{z}/{x}/{y}{r}.png", {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          subdomains: "abcd", maxZoom: 17,
+        }).addTo(histMap);
+      }
+
+      function renderHistoricalMap(geojson) {
+        initHistMap();
+        if (histGeoLayer) histMap.removeLayer(histGeoLayer);
+        if (histMapLegend) histMap.removeControl(histMapLegend);
+
+        const rates = geojson.features.map((f) => f.properties.rate).filter((r) => r > 0);
+        const breaks = rates.length >= 5 ? quantileBreaks(rates, MAP_COLORS.length) : [1, 10, 50, 200];
+
+        function rateColor(rate) {
+          if (rate <= 0) return MAP_ZERO;
+          for (let i = 0; i < breaks.length; i++) { if (rate <= breaks[i]) return MAP_COLORS[i]; }
+          return MAP_COLORS[MAP_COLORS.length - 1];
+        }
+
+        histGeoLayer = L.geoJSON(geojson, {
+          style(feature) {
+            return { fillColor: rateColor(feature.properties.rate), weight: 1, color: isDark() ? "#555" : "#999", fillOpacity: 0.75 };
           },
-        });
+          onEachFeature(feature, layer) {
+            const p = feature.properties;
+            layer.bindTooltip(
+              `<strong>${p.neighborhood || "ZCTA " + p.zcta}</strong><br>Offenses: ${p.total.toLocaleString()}<br>Pop: ${p.population.toLocaleString()}<br>Rate: ${p.rate}/1k`,
+              { sticky: true }
+            );
+          },
+        }).addTo(histMap);
+
+        histMapLegend = L.control({ position: "bottomright" });
+        histMapLegend.onAdd = function () {
+          const div = L.DomUtil.create("div", "map-legend");
+          const fmt = (v) => v < 10 ? v.toFixed(1) : Math.round(v);
+          div.innerHTML = "<strong>Per 1k pop</strong>";
+          div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_ZERO}"></span>0</div>`;
+          let prev = 0;
+          for (let i = 0; i < breaks.length; i++) {
+            const label = `${fmt(prev)}\u2013${fmt(breaks[i])}`;
+            div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_COLORS[i]}"></span>${label}</div>`;
+            prev = breaks[i];
+          }
+          div.innerHTML += `<div class="lg-row"><span class="lg-swatch" style="background:${MAP_COLORS[MAP_COLORS.length - 1]}"></span>${fmt(prev)}+</div>`;
+          return div;
+        };
+        histMapLegend.addTo(histMap);
+        setTimeout(() => histMap.invalidateSize(), 100);
       }
 
       // ---------- YEARLY TOTALS ----------
@@ -668,19 +706,20 @@
           renderMonthlyTrend(trendAll);
 
           if (activeTab === "historical" || charts.trend) {
-            const [seasonal, corr, precipCat, demo] = await Promise.all([
+            const [seasonal, precipCat, demo, geoHist] = await Promise.all([
               fetchJson("/api/seasonality" + qHist),
-              fetchJson("/api/correlation" + qHist),
               fetchJson("/api/precip-by-category" + qHist),
               fetchJson("/api/demographics" + qHist),
+              fetchJson("/api/geo" + qHist),
             ]);
             renderTrend(trendAll);
             renderSeasonality(seasonal);
-            renderTempBuckets(corr);
             renderYearlyTotals(trendAll);
             renderPrecipCategory(precipCat);
             renderDemographics(demo);
             renderDemoIncome(demo);
+            renderHistoricalMap(geoHist);
+            setTimeout(() => { if (histMap) histMap.invalidateSize(); }, 100);
           }
 
           statusEl.textContent = "";
