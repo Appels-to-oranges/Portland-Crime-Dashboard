@@ -318,7 +318,7 @@
           onEachFeature(feature, layer) {
             const p = feature.properties;
             layer.bindTooltip(
-              `<strong>ZCTA ${p.zcta}</strong><br>Offenses: ${p.total.toLocaleString()}<br>Pop: ${p.population.toLocaleString()}<br>Rate: ${p.rate}/1k`,
+              `<strong>${p.neighborhood || "ZCTA " + p.zcta}</strong><br>Offenses: ${p.total.toLocaleString()}<br>Pop: ${p.population.toLocaleString()}<br>Rate: ${p.rate}/1k`,
               { sticky: true }
             );
           },

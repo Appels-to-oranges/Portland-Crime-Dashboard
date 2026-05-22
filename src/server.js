@@ -313,6 +313,13 @@ app.get("/api/geo", async (req, res) => {
          FROM marts.mart_offense_monthly_zcta
          WHERE zcta IS NOT NULL ${clause}
          GROUP BY zcta
+       ),
+       zcta_neigh AS (
+         SELECT zcta, neighborhood,
+                row_number() OVER (PARTITION BY zcta ORDER BY sum(offense_count) DESC) AS rn
+         FROM marts.mart_offense_monthly_zcta
+         WHERE zcta IS NOT NULL AND neighborhood IS NOT NULL ${clause}
+         GROUP BY zcta, neighborhood
        )
        SELECT json_build_object(
          'type', 'FeatureCollection',
@@ -320,6 +327,7 @@ app.get("/api/geo", async (req, res) => {
            'type', 'Feature',
            'properties', json_build_object(
              'zcta', g.zcta,
+             'neighborhood', n.neighborhood,
              'total', coalesce(s.total_offenses, 0),
              'population', coalesce(s.population, 0),
              'rate', CASE WHEN coalesce(s.population, 0) > 0
@@ -330,7 +338,8 @@ app.get("/api/geo", async (req, res) => {
          )), '[]'::json)
        ) AS geojson
        FROM raw.zcta_geometry g
-       INNER JOIN stats s ON g.zcta = s.zcta`,
+       INNER JOIN stats s ON g.zcta = s.zcta
+       LEFT JOIN zcta_neigh n ON g.zcta = n.zcta AND n.rn = 1`,
       params,
     );
     res.json(rows[0]?.geojson ?? { type: "FeatureCollection", features: [] });
