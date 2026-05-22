@@ -432,14 +432,30 @@
       function renderDemographics(data) {
         const c = themeColors();
         const all = data.filter((d) => d.population >= 1000 && d.poverty_rate_pct != null);
-        const sorted = all
-          .map((d) => ({ zcta: d.zcta, neighborhood: d.primary_neighborhood || d.zcta, rate: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), poverty: parseFloat(d.poverty_rate_pct), income: d.median_income || 0, pop: d.population, offenses: d.total_offenses }))
+
+        const byNeigh = {};
+        all.forEach((d) => {
+          const name = d.primary_neighborhood || d.zcta;
+          if (!byNeigh[name]) byNeigh[name] = { neighborhood: name, offenses: 0, pop: 0, povertySum: 0, incomeSum: 0, count: 0 };
+          const b = byNeigh[name];
+          b.offenses += d.total_offenses;
+          b.pop += d.population;
+          b.povertySum += parseFloat(d.poverty_rate_pct) * d.population;
+          b.incomeSum += (d.median_income || 0) * d.population;
+          b.count++;
+        });
+        const sorted = Object.values(byNeigh)
+          .filter((d) => d.pop > 0)
+          .map((d) => ({ neighborhood: d.neighborhood, rate: parseFloat(((d.offenses / d.pop) * 1000).toFixed(1)), poverty: parseFloat((d.povertySum / d.pop).toFixed(1)), income: Math.round(d.incomeSum / d.pop), pop: d.pop, offenses: d.offenses }))
           .sort((a, b) => b.rate - a.rate)
           .slice(0, 15);
 
         const labels = sorted.map((d) => d.neighborhood);
         const rates = sorted.map((d) => d.rate);
-        const rVal = pearsonR(all.map((d) => parseFloat(d.poverty_rate_pct)), all.map((d) => (d.total_offenses / d.population) * 1000));
+        const rVal = pearsonR(
+          Object.values(byNeigh).filter((d) => d.pop > 0).map((d) => d.povertySum / d.pop),
+          Object.values(byNeigh).filter((d) => d.pop > 0).map((d) => (d.offenses / d.pop) * 1000)
+        );
         $("demo-bar-title").innerHTML = `Offense Rate by Neighborhood <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">colored by poverty &middot; r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
 
         const maxPov = Math.max(...sorted.map((d) => d.poverty));
@@ -457,16 +473,26 @@
           options: {
             indexAxis: "y",
             scales: { x: { beginAtZero: true, title: { display: true, text: "Offenses per 1,000 pop" } }, y: { grid: { display: false }, ticks: { autoSkip: false } } },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return [`ZCTA ${d.zcta}`, `Poverty: ${d.poverty}%`, `Income: $${d.income.toLocaleString()}`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel(ctx) { const d = sorted[ctx.dataIndex]; return [`Poverty: ${d.poverty}%`, `Income: $${d.income.toLocaleString()}`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
           },
         });
       }
 
       function renderDemoIncome(data) {
         const c = themeColors();
-        const pts = data
-          .filter((d) => d.population >= 1000 && d.median_income > 0)
-          .map((d) => ({ x: d.median_income, y: parseFloat(((d.total_offenses / d.population) * 1000).toFixed(1)), zcta: d.zcta, neighborhood: d.primary_neighborhood || d.zcta, pop: d.population, poverty: parseFloat(d.poverty_rate_pct) || 0 }));
+        const byNeigh = {};
+        data.filter((d) => d.population >= 1000 && d.median_income > 0).forEach((d) => {
+          const name = d.primary_neighborhood || d.zcta;
+          if (!byNeigh[name]) byNeigh[name] = { neighborhood: name, offenses: 0, pop: 0, incomeSum: 0, povertySum: 0 };
+          const b = byNeigh[name];
+          b.offenses += d.total_offenses;
+          b.pop += d.population;
+          b.incomeSum += d.median_income * d.population;
+          b.povertySum += (parseFloat(d.poverty_rate_pct) || 0) * d.population;
+        });
+        const pts = Object.values(byNeigh)
+          .filter((d) => d.pop > 0)
+          .map((d) => ({ x: Math.round(d.incomeSum / d.pop), y: parseFloat(((d.offenses / d.pop) * 1000).toFixed(1)), neighborhood: d.neighborhood, pop: d.pop, poverty: parseFloat((d.povertySum / d.pop).toFixed(1)) }));
         const rVal = pearsonR(pts.map((p) => p.x), pts.map((p) => p.y));
         $("demo-income-title").innerHTML = `Median Income vs. Offense Rate <span style="font-size:0.7rem;font-weight:400;color:var(--muted)">r = ${isNaN(rVal) ? "N/A" : rVal.toFixed(3)}</span>`;
 
@@ -479,7 +505,7 @@
               x: { title: { display: true, text: "Median Household Income ($)" }, ticks: { callback(v) { return "$" + (v / 1000).toFixed(0) + "k"; } } },
               y: { title: { display: true, text: "Offenses per 1,000 pop" }, beginAtZero: true },
             },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`${d.neighborhood} (${d.zcta})`, `Income: $${d.x.toLocaleString()}`, `Rate: ${d.y}/1k`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label(ctx) { const d = ctx.raw; return [`${d.neighborhood}`, `Income: $${d.x.toLocaleString()}`, `Rate: ${d.y}/1k`, `Pop: ${d.pop.toLocaleString()}`]; } } } },
           },
         });
       }
