@@ -94,9 +94,13 @@ async function loadAcsForZctas(orWaZctas, acsYear) {
   );
   url.searchParams.set("for", "zip code tabulation area:*");
   const res = await fetchWithRetry(url.toString());
-  const data = await res.json();
+  const text = await res.text();
+  if (text.trimStart().startsWith("<")) {
+    throw new Error(`Census ACS ${acsYear} returned HTML instead of JSON — dataset may not exist`);
+  }
+  const data = JSON.parse(text);
   if (!Array.isArray(data) || data.length < 2) {
-    throw new Error("Census ACS returned unexpected JSON");
+    throw new Error(`Census ACS ${acsYear} returned unexpected JSON`);
   }
   const header = data[0];
   const zi = header.indexOf("zip code tabulation area");
@@ -147,7 +151,11 @@ async function detectLatestAcsYear() {
     const url = `https://api.census.gov/data/${yr}/acs/acs5?get=NAME&for=us:1`;
     try {
       const res = await fetch(url, { headers: { "User-Agent": UA_BROWSER } });
-      if (res.ok) {
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (text.trimStart().startsWith("<") || !text.trimStart().startsWith("[")) continue;
+      const data = JSON.parse(text);
+      if (Array.isArray(data) && data.length >= 2) {
         console.error(`Latest available ACS 5-year vintage: ${yr}`);
         return yr;
       }
