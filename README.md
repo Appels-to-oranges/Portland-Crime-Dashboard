@@ -21,6 +21,12 @@ Live at [pdxblockbrief.com](https://pdxblockbrief.com)
 
 Or run the full pipeline: `npm run pipeline`
 
+## Production refresh
+
+The **Crime Data Refresh** service in Railway runs the pipeline every Monday at 18:48 UTC (`48 18 * * 1`) using the production PostGIS database over the private network. Each run checks that the dashboard tables reach the latest month in the raw offense data. Check the [live trend API](https://pdxblockbrief.com/api/trend) for the most recent published month.
+
+To run the pipeline on demand, use **Run workflow** in [Manual Data Refresh](https://github.com/Appels-to-oranges/Portland-Crime-Dashboard/actions/workflows/refresh.yml).
+
 ## Setup
 
 Requires PostgreSQL with PostGIS and Python 3 (for dbt).
