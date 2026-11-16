@@ -2,8 +2,18 @@ name: Daily Data Refresh
 
 on:
   schedule:
-    - cron: "30 10 * * *" # 3:30 AM PT / 10:30 UTC daily
+    - cron: "37 10 * * *" # 10:37 UTC daily
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/refresh.yml
+      - scripts/**
+      - dbt/**
   workflow_dispatch:
+
+concurrency:
+  group: production-data-refresh
+  cancel-in-progress: false
 
 jobs:
   refresh:
@@ -40,15 +50,28 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          node --input-type=module -e "
-            import pg from 'pg';
-            import { getPgConfig } from './scripts/lib/db-config.mjs';
-            const c = new pg.Client(getPgConfig());
-            await c.connect();
-            const { rows } = await c.query(
-              'SELECT max(_loaded_at)::text AS loaded, max(report_month_year) AS latest FROM raw.offenses'
-            );
-            console.log('Latest load:', rows[0]?.loaded);
-            console.log('Latest month:', rows[0]?.latest);
-            await c.end();
-          "
+          node --input-type=module <<'JS'
+          import pg from 'pg';
+          import { getPgConfig } from './scripts/lib/db-config.mjs';
+
+          const client = new pg.Client(getPgConfig());
+          await client.connect();
+          try {
+            const { rows: [freshness] } = await client.query(`
+              SELECT
+                (SELECT max(_loaded_at)::text FROM raw.offenses) AS loaded_at,
+                (SELECT max(to_date(nullif(trim(report_month_year), ''), 'Month YYYY'))::text
+                 FROM raw.offenses) AS raw_month,
+                (SELECT max(to_date(report_month_year, 'Month YYYY'))::text
+                 FROM marts.mart_offense_monthly_neighborhood) AS dashboard_month
+            `);
+            console.log('Latest load:', freshness.loaded_at);
+            console.log('Latest raw month:', freshness.raw_month);
+            console.log('Latest dashboard month:', freshness.dashboard_month);
+            if (!freshness.dashboard_month || freshness.dashboard_month !== freshness.raw_month) {
+              throw new Error('The dashboard tables are behind the raw offense data.');
+            }
+          } finally {
+            await client.end();
+          }
+          JS

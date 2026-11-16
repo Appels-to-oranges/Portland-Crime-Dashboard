@@ -22,13 +22,24 @@ const UA_BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function fetchWithRetry(url, opts = {}, retries = 3) {
+  let lastError;
   for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(url, { headers: { "User-Agent": UA_BROWSER, ...opts.headers }, redirect: "follow" });
-    if (res.ok) return res;
-    console.error(`Attempt ${attempt}/${retries}: ${res.status} ${res.statusText} for ${url}`);
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": UA_BROWSER, ...opts.headers },
+        redirect: "follow",
+        signal: opts.timeoutMs ? AbortSignal.timeout(opts.timeoutMs) : undefined,
+      });
+      if (res.ok) return res;
+      await res.body?.cancel();
+      throw new Error(`${res.status} ${res.statusText}`);
+    } catch (error) {
+      lastError = error;
+      console.error(`Attempt ${attempt}/${retries} for ${url}:`, error);
+    }
     if (attempt < retries) await sleep(3000 * attempt);
   }
-  throw new Error(`GET ${url} failed after ${retries} attempts`);
+  throw new Error(`GET ${url} failed after ${retries} attempts`, { cause: lastError });
 }
 
 async function fetchText(url) {
@@ -171,11 +182,14 @@ async function loadWeatherDaily() {
   u.searchParams.set("start_date", WEATHER_START);
   u.searchParams.set("end_date", WEATHER_END);
   u.searchParams.set("daily", "temperature_2m_max,precipitation_sum");
-  const res = await fetchWithRetry(u.toString());
+  const res = await fetchWithRetry(u.toString(), { timeoutMs: 20_000 });
   const j = await res.json();
   const times = j.daily?.time ?? [];
   const tmax = j.daily?.temperature_2m_max ?? [];
   const precip = j.daily?.precipitation_sum ?? [];
+  if (!times.length || tmax.length !== times.length || precip.length !== times.length) {
+    throw new Error("Open-Meteo returned missing or incomplete daily weather data.");
+  }
   const rows = [];
   for (let i = 0; i < times.length; i++) {
     rows.push({
@@ -319,8 +333,13 @@ async function main() {
   }
 
   console.error("Fetching Open-Meteo daily weather…");
-  const wxRows = await loadWeatherDaily();
-  console.error(`Weather days: ${wxRows.length}`);
+  let wxRows;
+  try {
+    wxRows = await loadWeatherDaily();
+    console.error(`Weather days: ${wxRows.length}`);
+  } catch (error) {
+    console.warn("Weather refresh failed. Keeping stored weather and continuing the crime refresh.", error);
+  }
 
   await client.query("BEGIN");
   try {
@@ -370,21 +389,22 @@ async function main() {
       }
     }
 
-    // Weather is always refreshed (adds new days)
-    await client.query("TRUNCATE raw.weather_daily");
-    for (const r of wxRows) {
-      await client.query(
-        `INSERT INTO raw.weather_daily (obs_date, temp_max_c, precip_mm) VALUES ($1::date, $2, $3)`,
-        [r.obs_date, r.temp_max_c, r.precip_mm],
-      );
+    if (wxRows) {
+      await client.query("TRUNCATE raw.weather_daily");
+      for (const r of wxRows) {
+        await client.query(
+          `INSERT INTO raw.weather_daily (obs_date, temp_max_c, precip_mm) VALUES ($1::date, $2, $3)`,
+          [r.obs_date, r.temp_max_c, r.precip_mm],
+        );
+      }
     }
 
     await client.query("COMMIT");
     const parts = [];
     if (zctaPolyRows) parts.push("zcta_geometry", "zcta_reference");
     if (acsBatches.length) parts.push(`acs_zcta (${acsBatches.map((b) => b.year).join(", ")})`);
-    parts.push("weather_daily");
-    console.error(`Reference ingest complete: ${parts.join(", ")}.`);
+    if (wxRows) parts.push("weather_daily");
+    console.error(`Reference ingest complete: ${parts.join(", ") || "using stored data"}.`);
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     throw e;

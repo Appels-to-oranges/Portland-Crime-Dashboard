@@ -531,7 +531,7 @@ app.get("/api/summary", async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT count(*)::int AS mart_rows,
-             max(report_month_year) AS latest_report_month_year
+             to_char(max(to_date(report_month_year, 'Month YYYY')), 'FMMonth YYYY') AS latest_report_month_year
       FROM marts.mart_offense_monthly_neighborhood
     `);
     res.json(rows[0] ?? {});
